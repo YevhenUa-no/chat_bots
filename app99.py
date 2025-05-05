@@ -1,4 +1,5 @@
 import streamlit as st
+
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 
@@ -17,6 +18,10 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "voice_input_active" not in st.session_state:
+    st.session_state.voice_input_active = False
+if "voice_transcript" not in st.session_state:
+    st.session_state.voice_transcript = ""
 
 
 # Helper functions to update session state
@@ -25,6 +30,64 @@ def complete_setup():
 
 def show_feedback():
     st.session_state.feedback_shown = True
+
+def start_voice_input():
+    st.session_state.voice_input_active = True
+    st.session_state.voice_transcript = ""
+
+def stop_voice_input():
+    st.session_state.voice_input_active = False
+
+def update_transcript(transcript):
+    st.session_state.voice_transcript = transcript
+
+# JavaScript for voice input
+voice_script = """
+async function startVoiceInput() {
+  if (!('webkitSpeechRecognition' in window)) {
+    alert('Speech recognition is not supported in this browser.');
+    return null;
+  }
+
+  const recognition = new webkitSpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US'; // You can set the language
+
+  return new Promise((resolve, reject) => {
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      resolve(transcript);
+      streamlit.set({voice_input_active: false, voice_transcript: transcript});
+    };
+
+    recognition.onerror = (event) => {
+      reject(event.error);
+      streamlit.set({voice_input_active: false});
+    };
+
+    recognition.onend = () => {
+      streamlit.set({voice_input_active: false});
+    };
+
+    recognition.start();
+    streamlit.set({voice_input_active: true});
+  });
+}
+
+if (streamlit.get('start_recording')) {
+  streamlit.set('start_recording', false);
+  startVoiceInput().then((transcript) => {
+    if (transcript) {
+      streamlit.set({ 'prompt': transcript });
+    }
+  });
+}
+"""
+
+st.markdown(f'<script>{voice_script}</script>', unsafe_allow_html=True)
+st.session_state.start_recording = False
+
 
 # Setup stage for collecting user details
 if not st.session_state.setup_complete:
@@ -38,17 +101,17 @@ if not st.session_state.setup_complete:
     if "skills" not in st.session_state:
         st.session_state["skills"] = ""
 
-   
+
     # Get personal information input
     st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40)
     st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200)
     st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200)
 
-    
+
     # Company and Position Section
     st.subheader('Company and Position')
 
-    # Initialize session state for company and position information and setting default values 
+    # Initialize session state for company and position information and setting default values
     if "level" not in st.session_state:
         st.session_state["level"] = "Junior"
     if "position" not in st.session_state:
@@ -59,6 +122,7 @@ if not st.session_state.setup_complete:
     col1, col2 = st.columns(2)
     with col1:
         st.session_state["level"] = st.radio(
+
             "Choose level",
             key="visibility",
             options=["Junior", "Mid-level", "Senior"],
@@ -95,7 +159,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     )
 
     # Initialize OpenAI client
-    client = OpenAI(api_key=["OPEN_API_KEY"])
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
     # Setting OpenAI model if not already initialized
     if "openai_model" not in st.session_state:
@@ -119,12 +183,30 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # Handle user input and OpenAI response
     # Put a max_chars limit
-    if st.session_state.user_message_count < 5:
-        if prompt := st.chat_input("Your response", max_chars=1000):
+    prompt = st.chat_input("Your response", max_chars=1000, key="prompt")
+    voice_button_label = "Stop Recording" if st.session_state.voice_input_active else "🎙️ Speak"
+
+    col1, col2 = st.columns([0.8, 0.2])
+    with col1:
+        if prompt:
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
+            st.session_state.prompt = "" # Clear the input after sending
 
+    with col2:
+        if st.button(voice_button_label):
+            st.session_state.start_recording = True
+
+    if st.session_state.voice_transcript:
+        st.session_state.messages.append({"role": "user", "content": st.session_state.voice_transcript})
+        with st.chat_message("user"):
+            st.markdown(st.session_state.voice_transcript)
+        st.session_state.voice_transcript = ""
+
+
+    if st.session_state.user_message_count < 5:
+        if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
             if st.session_state.user_message_count < 4:
                 with st.chat_message("assistant"):
                     stream = client.chat.completions.create(
@@ -138,14 +220,14 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                     response = st.write_stream(stream)
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
-            # Increment the user message count
+            # Increment the user message count after the assistant responds
             st.session_state.user_message_count += 1
 
     # Check if the user message count reaches 5
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
 
-# Show "Get Feedback" 
+# Show "Get Feedback"
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback):
         st.write("Fetching feedback...")
@@ -157,7 +239,7 @@ if st.session_state.feedback_shown:
     conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages])
 
     # Initialize new OpenAI client instance for feedback
-    feedback_client = OpenAI(api_key=["OPEN_API_KEY"])
+    feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
     # Generate feedback using the stored messages and write a system prompt for the feedback
     feedback_completion = feedback_client.chat.completions.create(
@@ -178,4 +260,6 @@ if st.session_state.feedback_shown:
 
     # Button to restart the interview
     if st.button("Restart Interview", type="primary"):
-            streamlit_js_eval(js_expressions="parent.window.location.reload()")
+        for key in st.session_state.keys():
+            del st.session_state[key]
+        st.rerun()
