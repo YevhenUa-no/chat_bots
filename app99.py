@@ -22,6 +22,8 @@ if "voice_input_active" not in st.session_state:
     st.session_state.voice_input_active = False
 if "voice_transcript" not in st.session_state:
     st.session_state.voice_transcript = ""
+if "start_recording" not in st.session_state:
+    st.session_state.start_recording = False
 
 
 # Helper functions to update session state
@@ -30,16 +32,6 @@ def complete_setup():
 
 def show_feedback():
     st.session_state.feedback_shown = True
-
-def start_voice_input():
-    st.session_state.voice_input_active = True
-    st.session_state.voice_transcript = ""
-
-def stop_voice_input():
-    st.session_state.voice_input_active = False
-
-def update_transcript(transcript):
-    st.session_state.voice_transcript = transcript
 
 # JavaScript for voice input
 voice_script = """
@@ -86,8 +78,6 @@ if (streamlit.get('start_recording')) {
 """
 
 st.markdown(f'<script>{voice_script}</script>', unsafe_allow_html=True)
-st.session_state.start_recording = False
-
 
 # Setup stage for collecting user details
 if not st.session_state.setup_complete:
@@ -182,7 +172,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                 st.markdown(message["content"])
 
     # Handle user input and OpenAI response
-    # Put a max_chars limit
     prompt = st.chat_input("Your response", max_chars=1000, key="prompt")
     voice_button_label = "Stop Recording" if st.session_state.voice_input_active else "🎙️ Speak"
 
@@ -192,11 +181,11 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
-            st.session_state.prompt = "" # Clear the input after sending
+            # The line `st.session_state.prompt = ""` has been entirely removed from here.
 
     with col2:
-        if st.button(voice_button_label):
-            st.session_state.start_recording = True
+        if st.button(voice_button_label, on_click=lambda: st.session_state.update({"start_recording": True})):
+            pass # The JavaScript will handle the recording
 
     if st.session_state.voice_transcript:
         st.session_state.messages.append({"role": "user", "content": st.session_state.voice_transcript})
@@ -207,18 +196,17 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     if st.session_state.user_message_count < 5:
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-            if st.session_state.user_message_count < 4:
-                with st.chat_message("assistant"):
-                    stream = client.chat.completions.create(
-                        model=st.session_state["openai_model"],
-                        messages=[
-                            {"role": m["role"], "content": m["content"]}
-                            for m in st.session_state.messages
-                        ],
-                        stream=True,
-                    )
-                    response = st.write_stream(stream)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+            with st.chat_message("assistant"):
+                stream = client.chat.completions.create(
+                    model=st.session_state["openai_model"],
+                    messages=[
+                        {"role": m["role"], "content": m["content"]}
+                        for m in st.session_state.messages
+                    ],
+                    stream=True,
+                )
+                response = st.write_stream(stream)
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
             # Increment the user message count after the assistant responds
             st.session_state.user_message_count += 1
