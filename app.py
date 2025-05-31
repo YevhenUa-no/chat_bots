@@ -181,7 +181,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
-            # REMOVED THE LINE: st.session_state.prompt = "" # Clear the input after sending
+            # The line `st.session_state.prompt = ""` has been entirely removed from here.
 
     with col2:
         if st.button(voice_button_label, on_click=lambda: st.session_state.update({"start_recording": True})):
