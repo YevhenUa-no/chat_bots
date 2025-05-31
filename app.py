@@ -3,7 +3,7 @@ from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 
 # Setting up the Streamlit page configuration
-st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
+st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="1💬")
 st.title("Chatbot v1")
 
 # Initialize session state variables
