@@ -34,7 +34,8 @@ def show_feedback():
     st.session_state.feedback_shown = True
 
 # --- NEW: Function to transcribe audio using OpenAI Whisper ---
-@st.cache_data(show_spinner=False) # Cache the client creation and transcription for performance
+# This decorator was causing the error: @st.cache_data(show_spinner=False)
+# It has been removed because OpenAI client objects are not serializable by Streamlit's cache.
 def get_openai_client():
     return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -134,9 +135,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     icon="👋",
     )
 
-    # Initialize OpenAI client
-    # client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"]) # Moved to get_openai_client()
-
     # Setting OpenAI model if not already initialized
     if "openai_model" not in st.session_state:
         st.session_state["openai_model"] = "gpt-4o"
@@ -157,7 +155,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    # --- NEW: Microphone recording and Whisper integration ---
+    # --- Microphone recording and Whisper integration ---
     col1, col2 = st.columns([0.8, 0.2])
 
     with col1:
@@ -175,7 +173,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         )
     # --- END NEW ---
 
-    # --- NEW: Process audio if recorded ---
+    # --- Process audio if recorded ---
     if st.session_state.audio_bytes:
         # Transcribe the audio using Whisper
         voice_transcript = transcribe_audio(st.session_state.audio_bytes)
@@ -219,7 +217,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
 
     # Check if the user message count reaches 5
-    if st.session_state.user_message_count >= 5:
+    if st.session_state.user_message_count >= 5 and not st.session_state.chat_complete:
         st.session_state.chat_complete = True
         st.rerun() # Rerun to transition to feedback stage
 
@@ -236,7 +234,7 @@ if st.session_state.feedback_shown:
     conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages])
 
     # Initialize new OpenAI client instance for feedback
-    feedback_client = get_openai_client() # Use the cached client
+    feedback_client = get_openai_client() # Get client for feedback
 
     # Generate feedback using the stored messages and write a system prompt for the feedback
     feedback_completion = feedback_client.chat.completions.create(
@@ -260,4 +258,4 @@ if st.session_state.feedback_shown:
         # This will clear all session state variables and force a full reload
         for key in st.session_state.keys():
             del st.session_state[key]
-        streamlit_js_eval(js_expressions="parent.window.location.reload()") # Use JS for a full page reload
+        streamlit_js_eval(js_expressions="parent.window.location.reload()")
