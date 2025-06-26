@@ -3,3 +3,4 @@ openai
 streamlit-mic-recorder
 pydub
 streamlit-js-eval
+ffmpeg
