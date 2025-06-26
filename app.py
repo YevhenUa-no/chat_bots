@@ -176,7 +176,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     # --- Process audio if recorded ---
     if st.session_state.audio_bytes:
         # Transcribe the audio using Whisper
-        voice_transcript = transcribe_audio(st.session_state.audio_bytes)
+        voice_transcript = transcribe_audio(st.session_state.audio_bytes['bytes'])
         if voice_transcript:
             prompt = voice_transcript # Set the prompt from the voice transcript
             st.session_state.audio_bytes = None # Clear audio bytes after use
