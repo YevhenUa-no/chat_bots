@@ -25,8 +25,6 @@ def fetch_ai_response(client, input_text, user_system_prompt="You are a helpful 
     if user_system_prompt:
         messages.append({"role": "system", "content": user_system_prompt})
 
-    # The background prompt part should be combined with the system prompt or user input carefully.
-    # For now, let's append it to the user's input before sending.
     background_prompt_part = "Also, tell a variation of a joke about a Truck driver that is coming back to the gas station and the worker says 'Loooong time no see!'"
     final_input_text = f"{input_text} {background_prompt_part}"
     
@@ -57,6 +55,13 @@ def auto_play_audio(audio_file_path):
         st.markdown(audio_html, unsafe_allow_html=True)
     else:
         st.error(f"Error: Audio file not found at {audio_file_path}")
+
+# Helper functions to update session state
+def complete_setup():
+    st.session_state.setup_complete = True
+
+def show_feedback():
+    st.session_state.feedback_shown = True
 
 # Global client setup
 client = None
@@ -102,7 +107,7 @@ def record_and_transcribe_field(field_label, field_session_key, unique_key):
             recorded_audio = audio_recorder(
                 text="",
                 icon_size="1x",
-                use_container_width=True,
+                # REMOVED: use_container_width=True, as this is not supported in the available versions
                 key=unique_key + "_audio_recorder"
             )
 
@@ -139,7 +144,6 @@ def main():
         st.session_state.chat_complete = False
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    # FIX APPLIED HERE: Initialize a separate session state variable for chat input's transcribed text
     if "transcribed_chat_input_value" not in st.session_state:
         st.session_state.transcribed_chat_input_value = ""
 
@@ -226,14 +230,12 @@ def main():
         col_chat_input, col_chat_mic = st.columns([0.8, 0.2])
 
         with col_chat_input:
-            # FIX APPLIED HERE: Use transcribed_chat_input_value for the chat_input's value
             prompt = st.chat_input(
                 "Your response",
                 max_chars=1000,
                 key="chat_text_input",
-                value=st.session_state.transcribed_chat_input_value # <--- CORRECT WAY TO PASS VALUE
+                value=st.session_state.transcribed_chat_input_value
             )
-            # FIX APPLIED HERE: Clear the transcribed value immediately after the chat_input potentially uses it
             st.session_state.transcribed_chat_input_value = ""
 
 
@@ -242,7 +244,7 @@ def main():
                 recorded_chat_audio = audio_recorder(
                     text="",
                     icon_size="2x",
-                    use_container_width=True,
+                    # REMOVED: use_container_width=True, as this is not supported in the available versions
                     key="main_chat_audio_recorder"
                 )
 
@@ -254,9 +256,8 @@ def main():
                         
                         voice_transcript = transcribe_audio(client, temp_chat_audio_file)
                         if voice_transcript:
-                            # FIX APPLIED HERE: Store the transcript in the *separate* session state variable
                             st.session_state.transcribed_chat_input_value = voice_transcript
-                            st.experimental_rerun() # Rerun to update the chat_input immediately
+                            st.experimental_rerun()
 
                     except Exception as e:
                         st.error(f"Error processing chat audio: {e}")
