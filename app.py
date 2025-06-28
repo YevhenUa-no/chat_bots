@@ -21,10 +21,12 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
-# --- NEW: Microphone recorder session state variables ---
-if "audio_bytes" not in st.session_state:
-    st.session_state.audio_bytes = None
-# --- END NEW ---
+# Microphone recorder session state variables for general use
+if "audio_bytes_general" not in st.session_state: # Renamed to avoid conflict with chat input
+    st.session_state.audio_bytes_general = None
+if "transcribed_field" not in st.session_state: # To track which field was just transcribed
+    st.session_state.transcribed_field = None
+
 
 # Helper functions to update session state
 def complete_setup():
@@ -33,9 +35,6 @@ def complete_setup():
 def show_feedback():
     st.session_state.feedback_shown = True
 
-# --- NEW: Function to transcribe audio using OpenAI Whisper ---
-# This decorator was causing the error: @st.cache_data(show_spinner=False)
-# It has been removed because OpenAI client objects are not serializable by Streamlit's cache.
 def get_openai_client():
     return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -45,12 +44,16 @@ def transcribe_audio(audio_bytes):
 
     client = get_openai_client()
 
-    # Convert audio bytes to a format Whisper can accept (e.g., MP3 or WAV)
-    # The mic_recorder typically returns WAV bytes, but converting to MP3 can be more robust for Whisper
     try:
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes), format="wav")
-        # Export to a temporary MP3 file or use BytesIO with named parameters
-        # For direct API call, BytesIO is often preferred
+        # The mic_recorder component provides WAV bytes.
+        # Ensure it's a bytes object, not a dictionary from mic_recorder.
+        if isinstance(audio_bytes, dict) and 'bytes' in audio_bytes:
+            audio_data_for_whisper = audio_bytes['bytes']
+        else:
+            audio_data_for_whisper = audio_bytes # Assume it's already bytes if not a dict
+
+        audio_segment = AudioSegment.from_file(io.BytesIO(audio_data_for_whisper), format="wav")
+        
         mp3_audio_stream = io.BytesIO()
         audio_segment.export(mp3_audio_stream, format="mp3")
         mp3_audio_stream.name = "audio.mp3" # Whisper API needs a filename
@@ -65,7 +68,16 @@ def transcribe_audio(audio_bytes):
     except Exception as e:
         st.error(f"Error during transcription: {e}")
         return ""
-# --- END NEW ---
+
+# Function to handle transcription for a specific field
+def handle_field_transcription(field_key, audio_data):
+    if audio_data:
+        transcribed_text = transcribe_audio(audio_data)
+        if transcribed_text:
+            st.session_state[field_key] = transcribed_text
+            st.session_state.audio_bytes_general = None # Clear general audio bytes
+            st.session_state.transcribed_field = field_key # Mark which field was updated
+            st.rerun()
 
 
 # Setup stage for collecting user details
@@ -80,12 +92,56 @@ if not st.session_state.setup_complete:
     if "skills" not in st.session_state:
         st.session_state["skills"] = ""
 
+    # --- Name Input with Voice Option ---
+    col_name_input, col_name_mic = st.columns([0.8, 0.2])
+    with col_name_input:
+        st.session_state["name"] = st.text_input(
+            label="Name",
+            value=st.session_state["name"],
+            placeholder="Enter your name",
+            max_chars=40,
+            key="name_text_input" # Unique key for the text input
+        )
+    with col_name_mic:
+        name_audio_bytes = mic_recorder(
+            start_prompt="🎙️", stop_prompt="⏹️", just_once=True, use_container_width=True, key="name_mic"
+        )
+        if name_audio_bytes:
+            handle_field_transcription("name", name_audio_bytes)
 
-    # Get personal information input
-    st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40)
-    st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200)
-    st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200)
+    # --- Experience Input with Voice Option ---
+    col_exp_input, col_exp_mic = st.columns([0.8, 0.2])
+    with col_exp_input:
+        st.session_state["experience"] = st.text_area(
+            label="Experience",
+            value=st.session_state["experience"],
+            placeholder="Describe your experience",
+            max_chars=200,
+            key="experience_text_area" # Unique key
+        )
+    with col_exp_mic:
+        exp_audio_bytes = mic_recorder(
+            start_prompt="🎙️", stop_prompt="⏹️", just_once=True, use_container_width=True, key="experience_mic"
+        )
+        if exp_audio_bytes:
+            handle_field_transcription("experience", exp_audio_bytes)
 
+    # --- Skills Input with Voice Option ---
+    col_skills_input, col_skills_mic = st.columns([0.8, 0.2])
+    with col_skills_input:
+        st.session_state["skills"] = st.text_area(
+            label="Skills",
+            value=st.session_state["skills"],
+            placeholder="List your skills",
+            max_chars=200,
+            key="skills_text_area" # Unique key
+        )
+    with col_skills_mic:
+        skills_audio_bytes = mic_recorder(
+            start_prompt="🎙️", stop_prompt="⏹️", just_once=True, use_container_width=True, key="skills_mic"
+        )
+        if skills_audio_bytes:
+            handle_field_transcription("skills", skills_audio_bytes)
 
     # Company and Position Section
     st.subheader('Company and Position')
@@ -102,7 +158,7 @@ if not st.session_state.setup_complete:
     with col1:
         st.session_state["level"] = st.radio(
             "Choose level",
-            key="visibility",
+            key="level_radio", # Unique key
             options=["Junior", "Mid-level", "Senior"],
             index=["Junior", "Mid-level", "Senior"].index(st.session_state["level"])
         )
@@ -111,15 +167,16 @@ if not st.session_state.setup_complete:
         st.session_state["position"] = st.selectbox(
             "Choose a position",
             ("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst"),
-            index=("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst").index(st.session_state["position"])
+            index=("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst").index(st.session_state["position"]),
+            key="position_selectbox" # Unique key
         )
 
     st.session_state["company"] = st.selectbox(
         "Select a Company",
         ("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify"),
-        index=("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify").index(st.session_state["company"])
+        index=("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify").index(st.session_state["company"]),
+        key="company_selectbox" # Unique key
     )
-
 
     # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup):
@@ -155,7 +212,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    # --- Microphone recording and Whisper integration ---
+    # --- Microphone recording and Whisper integration for chat input ---
     col1, col2 = st.columns([0.8, 0.2])
 
     with col1:
@@ -163,24 +220,22 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         prompt = st.chat_input("Your response", max_chars=1000, key="chat_text_input")
 
     with col2:
-        # Microphone recorder button
-        st.session_state.audio_bytes = mic_recorder(
+        # Microphone recorder button for chat
+        chat_audio_bytes = mic_recorder(
             start_prompt="🎙️ Speak",
             stop_prompt="⏹️ Stop",
             just_once=True, # Transcribe once per recording
             use_container_width=True,
-            key="mic_recorder_button"
+            key="chat_mic_recorder_button"
         )
-    # --- END NEW ---
 
-    # --- Process audio if recorded ---
-    if st.session_state.audio_bytes:
-        # Transcribe the audio using Whisper
-        voice_transcript = transcribe_audio(st.session_state.audio_bytes['bytes'])
+    # Process audio if recorded for chat
+    if chat_audio_bytes:
+        voice_transcript = transcribe_audio(chat_audio_bytes)
         if voice_transcript:
             prompt = voice_transcript # Set the prompt from the voice transcript
-            st.session_state.audio_bytes = None # Clear audio bytes after use
-            st.rerun() # Rerun to process the new prompt immediately
+            st.session_state.chat_text_input = voice_transcript # Update text input widget directly
+            st.rerun() # Rerun to display the new prompt immediately
 
     # Handle user input (either typed or from Whisper)
     if st.session_state.user_message_count < 5:
@@ -188,9 +243,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
-            # Clear the prompt from the chat_input widget after it's been used
-            # This is important to prevent re-adding the same message on reruns
-            st.session_state.chat_text_input = "" # This will reset the text input
 
             # Get assistant response if user message count allows
             if st.session_state.user_message_count < 4:
@@ -246,7 +298,7 @@ if st.session_state.feedback_shown:
              Overal Score: //Your score
              Feedback: //Here you put your feedback
              Give only the feedback do not ask any additional questins.
-              """},
+             """},
             {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any converstation: {conversation_history}"}
         ]
     )
