@@ -3,7 +3,7 @@ from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 from streamlit_mic_recorder import mic_recorder # Import the mic_recorder component
 import io # To handle audio bytes
-import os # For temporary file creation (optional, but good practice)
+import os # For temporary file creation (important for this fix)
 from pydub import AudioSegment # For audio format conversion
 
 # Setting up the Streamlit page configuration
@@ -38,21 +38,33 @@ def show_feedback():
 def get_openai_client():
     return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-def transcribe_audio(audio_bytes):
-    if audio_bytes is None:
+def transcribe_audio(audio_data_from_mic_recorder):
+    if audio_data_from_mic_recorder is None:
         return ""
 
     client = get_openai_client()
 
-    try:
-        # The mic_recorder component provides WAV bytes.
-        # Ensure it's a bytes object, not a dictionary from mic_recorder.
-        if isinstance(audio_bytes, dict) and 'bytes' in audio_bytes:
-            audio_data_for_whisper = audio_bytes['bytes']
-        else:
-            audio_data_for_whisper = audio_bytes # Assume it's already bytes if not a dict
+    # Ensure we get the raw bytes from the mic_recorder output
+    if isinstance(audio_data_from_mic_recorder, dict) and 'bytes' in audio_data_from_mic_recorder:
+        raw_audio_bytes = audio_data_from_mic_recorder['bytes']
+    else:
+        # Fallback, though mic_recorder usually returns a dict
+        raw_audio_bytes = audio_data_from_mic_recorder
+        # You might want to add a warning here if this path is taken unexpectedly
+        # st.warning("Mic recorder did not return expected dictionary format. Attempting to use raw bytes directly.")
 
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_data_for_whisper), format="wav")
+    # --- FIX START: Write to a temporary .wav file before pydub processing ---
+    temp_wav_path = "temp_recorded_audio.wav"
+    try:
+        with open(temp_wav_path, "wb") as f:
+            f.write(raw_audio_bytes)
+    except Exception as e:
+        st.error(f"Error saving temporary WAV file: {e}")
+        return ""
+
+    transcript = ""
+    try:
+        audio_segment = AudioSegment.from_file(temp_wav_path, format="wav")
         
         mp3_audio_stream = io.BytesIO()
         audio_segment.export(mp3_audio_stream, format="mp3")
@@ -66,16 +78,21 @@ def transcribe_audio(audio_bytes):
             )
         return transcript
     except Exception as e:
-        st.error(f"Error during transcription: {e}")
+        st.error(f"Error during transcription (pydub/Whisper): {e}")
         return ""
+    finally:
+        # --- FIX END: Clean up the temporary .wav file ---
+        if os.path.exists(temp_wav_path):
+            os.remove(temp_wav_path)
 
 # Function to handle transcription for a specific field
 def handle_field_transcription(field_key, audio_data):
     if audio_data:
+        # Pass the raw mic_recorder output (dict or bytes) to transcribe_audio
         transcribed_text = transcribe_audio(audio_data)
         if transcribed_text:
             st.session_state[field_key] = transcribed_text
-            st.session_state.audio_bytes_general = None # Clear general audio bytes
+            st.session_state.audio_bytes_general = None # Clear general audio bytes (if used for this)
             st.session_state.transcribed_field = field_key # Mark which field was updated
             st.rerun()
 
