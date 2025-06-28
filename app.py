@@ -107,7 +107,6 @@ def record_and_transcribe_field(field_label, field_session_key, unique_key):
             recorded_audio = audio_recorder(
                 text="",
                 icon_size="1x",
-                # REMOVED: use_container_width=True, as this is not supported in the available versions
                 key=unique_key + "_audio_recorder"
             )
 
@@ -118,7 +117,7 @@ def record_and_transcribe_field(field_label, field_session_key, unique_key):
                         f.write(recorded_audio)
                     
                     st.session_state["recorded_text_" + unique_key] = transcribe_audio(client, temp_audio_file)
-                    st.experimental_rerun()
+                    st.rerun() # CHANGED: st.experimental_rerun() -> st.rerun()
 
                 except Exception as e:
                     st.error(f"Error processing audio for {field_label}: {e}")
@@ -244,7 +243,6 @@ def main():
                 recorded_chat_audio = audio_recorder(
                     text="",
                     icon_size="2x",
-                    # REMOVED: use_container_width=True, as this is not supported in the available versions
                     key="main_chat_audio_recorder"
                 )
 
@@ -257,7 +255,7 @@ def main():
                         voice_transcript = transcribe_audio(client, temp_chat_audio_file)
                         if voice_transcript:
                             st.session_state.transcribed_chat_input_value = voice_transcript
-                            st.experimental_rerun()
+                            st.rerun() # CHANGED: st.experimental_rerun() -> st.rerun()
 
                     except Exception as e:
                         st.error(f"Error processing chat audio: {e}")
