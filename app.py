@@ -1,6 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
+from streamlit_mic_recorder import mic_recorder # Import the mic_recorder
 
 # Setting up the Streamlit page configuration
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
@@ -17,7 +18,8 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
+if "audio_transcription" not in st.session_state: # New session state for transcription
+    st.session_state.audio_transcription = ""
 
 # Helper functions to update session state
 def complete_setup():
@@ -38,17 +40,56 @@ if not st.session_state.setup_complete:
     if "skills" not in st.session_state:
         st.session_state["skills"] = ""
 
-   
-    # Get personal information input
-    st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40)
-    st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200)
-    st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200)
+    # Option to input via text or voice
+    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"))
 
-    
+    if input_method == "Type":
+        # Get personal information input via text
+        st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40)
+        st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200)
+        st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200)
+    else: # input_method == "Speak"
+        st.write("Record your personal information (Name, Experience, Skills):")
+        # Microphone recorder button
+        mic_recorder_output = mic_recorder(
+            start_prompt="🎙️ Speak",
+            stop_prompt="⏹️ Stop",
+            just_once=True, # Transcribe once per recording (re-enables button after stop)
+            use_container_width=True,
+            key="mic_recorder_button"
+        )
+
+        if mic_recorder_output:
+            # Initialize OpenAI client for transcription
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+            audio_bytes = mic_recorder_output['bytes']
+            if audio_bytes:
+                # Save the audio to a temporary file
+                with open("audio.webm", "wb") as f:
+                    f.write(audio_bytes)
+                audio_file = open("audio.webm", "rb")
+
+                # Transcribe the audio
+                with st.spinner("Transcribing audio..."):
+                    transcript = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file
+                    )
+                st.session_state.audio_transcription = transcript.text
+                st.write(f"**Transcription:** {st.session_state.audio_transcription}")
+
+                # You'll need to parse this transcription into name, experience, skills
+                # This is a simplified example; a real-world scenario might need more robust NLP
+                st.info("Please manually review and edit the transcribed information below.")
+                st.session_state["name"] = st.text_input(label="Name (from audio)", value=st.session_state["name"] or st.session_state.audio_transcription.split(',')[0].strip() if st.session_state.audio_transcription else "", placeholder="Enter your name", max_chars=40)
+                st.session_state["experience"] = st.text_area(label="Experience (from audio)", value=st.session_state["experience"] or st.session_state.audio_transcription, placeholder="Describe your experience", max_chars=200)
+                st.session_state["skills"] = st.text_area(label="Skills (from audio)", value=st.session_state["skills"] or st.session_state.audio_transcription, placeholder="List your skills", max_chars=200)
+
+
     # Company and Position Section
     st.subheader('Company and Position')
 
-    # Initialize session state for company and position information and setting default values 
+    # Initialize session state for company and position information and setting default values
     if "level" not in st.session_state:
         st.session_state["level"] = "Junior"
     if "position" not in st.session_state:
@@ -79,10 +120,17 @@ if not st.session_state.setup_complete:
     )
 
 
-
     # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup):
-        st.write("Setup complete. Starting interview...")
+        # You might want to add a check here to ensure at least some fields are filled
+        if not (st.session_state["name"] or st.session_state["experience"] or st.session_state["skills"]):
+            st.warning("Please provide your personal information before starting the interview.")
+            st.session_state.setup_complete = False # Prevent setup from completing if fields are empty
+        else:
+            st.write("Setup complete. Starting interview...")
+            # If setup is complete and data is provided, refresh to proceed
+            streamlit_js_eval(js_expressions="parent.window.location.reload()")
+
 
 # Interview phase
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
@@ -104,12 +152,12 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     # Initializing the system prompt for the chatbot
     if not st.session_state.messages:
         st.session_state.messages = [{
-            "role": "system",
-            "content": (f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
-                        f"with experience {st.session_state['experience']} and skills {st.session_state['skills']}. "
-                        f"You should interview him for the position {st.session_state['level']} {st.session_state['position']} "
-                        f"at the company {st.session_state['company']}")
-        }]
+                "role": "system",
+                "content": (f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
+                            f"with experience {st.session_state['experience']} and skills {st.session_state['skills']}. "
+                            f"You should interview him for the position {st.session_state['level']} {st.session_state['position']} "
+                            f"at the company {st.session_state['company']}")
+            }]
 
     # Display chat messages
     for message in st.session_state.messages:
@@ -145,7 +193,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
 
-# Show "Get Feedback" 
+# Show "Get Feedback"
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback):
         st.write("Fetching feedback...")
@@ -166,11 +214,11 @@ if st.session_state.feedback_shown:
             {"role": "system", "content": """You are a helpful tool that provides feedback on an interviewee performance.
              Before the Feedback give a score of 1 to 10.
              Follow this format:
-             Overal Score: //Your score
+             Overall Score: //Your score
              Feedback: //Here you put your feedback
-             Give only the feedback do not ask any additional questins.
-              """},
-            {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any converstation: {conversation_history}"}
+             Give only the feedback do not ask any additional questions.
+             """},
+            {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any conversation: {conversation_history}"}
         ]
     )
 
@@ -178,4 +226,4 @@ if st.session_state.feedback_shown:
 
     # Button to restart the interview
     if st.button("Restart Interview", type="primary"):
-            streamlit_js_eval(js_expressions="parent.window.location.reload()")
+        streamlit_js_eval(js_expressions="parent.window.location.reload()")
