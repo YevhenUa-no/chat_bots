@@ -2,7 +2,7 @@ import streamlit as st
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 from streamlit_mic_recorder import mic_recorder
-import os # Import os for removing temporary audio files
+import os
 
 # Setting up the Streamlit page configuration
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
@@ -19,6 +19,9 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
+# New session state for controlling the flow after assistant response
+if "awaiting_user_action" not in st.session_state:
+    st.session_state.awaiting_user_action = False
 
 # Session state variables for initial personal information audio transcriptions
 if "name_audio_transcription" not in st.session_state:
@@ -204,13 +207,31 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         if message["role"] != "system":
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-                # Add audio playback for assistant messages
+                # Play audio for past assistant messages (if not currently awaiting action)
+                # This ensures audio doesn't replay when user clicks "Send" for new input
                 if message["role"] == "assistant" and "audio_file_path" in message:
-                    st.audio(message["audio_file_path"], format="audio/mpeg", loop=False, autoplay=False)
+                    # Only autoplay the *most recent* assistant message, and only if we are awaiting user action
+                    # This prevents re-playing all prior assistant messages on every rerun.
+                    if st.session_state.awaiting_user_action and message == st.session_state.messages[-1]:
+                         st.audio(message["audio_file_path"], format="audio/mpeg", loop=False, autoplay=True, key=f"autoplay_{message['audio_file_path']}")
+                    else:
+                        st.audio(message["audio_file_path"], format="audio/mpeg", loop=False, autoplay=False, key=f"manualplay_{message['audio_file_path']}")
 
 
-    # Handle user input (voice or text) and OpenAI response
-    if st.session_state.user_message_count < 5:
+    # --- Interview Turn Logic ---
+    # Case 1: Assistant has just responded, waiting for user to click "Continue"
+    if st.session_state.awaiting_user_action:
+        st.info("Listen to the assistant's response, then click 'Continue' to proceed.")
+        # The st.audio for the latest message will autoplay from the loop above if awaiting_user_action is True
+
+        if st.button("Continue Interview", key="continue_interview_button"):
+            st.session_state.awaiting_user_action = False
+            # Increment user_message_count ONLY when they click continue, preparing for next input
+            st.session_state.user_message_count += 1
+            st.rerun()
+
+    # Case 2: Ready for user input (either initial turn or after clicking "Continue")
+    elif st.session_state.user_message_count < 5:
         # Voice recording button for chat input
         mic_recorder_chat_output = mic_recorder(
             start_prompt="🎙️ Speak your answer",
@@ -221,7 +242,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         )
 
         if mic_recorder_chat_output and mic_recorder_chat_output['bytes']:
-            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
             audio_bytes = mic_recorder_chat_output['bytes']
             temp_audio_file_path = "chat_audio_response.webm" # Use a generic name for chat audio
             with open(temp_audio_file_path, "wb") as f:
@@ -259,7 +279,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                 st.session_state.current_chat_voice_input = ""
 
                 # Only get assistant response if there are turns left
-                if st.session_state.user_message_count < 4:
+                if st.session_state.user_message_count < 4: # Before the 5th user message leads to feedback
                     with st.chat_message("assistant"):
                         stream = client.chat.completions.create(
                             model=st.session_state["openai_model"],
@@ -272,7 +292,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                         response_text = st.write_stream(stream) # Get the full response text
 
                         # Generate speech from the assistant's response
-                        # Ensure the directory exists if you're saving to a specific path
                         speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
                         try:
                             with client.audio.speech.create(
@@ -285,32 +304,30 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             # Append the response and audio file path to messages
                             st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
                             
-                            # Immediately play the audio for the current response
-                            st.audio(speech_file_path, format="audio/mpeg", loop=False, autoplay=True)
+                            # Set flag to await user action after assistant speaks
+                            st.session_state.awaiting_user_action = True
+                            st.rerun() # Rerun to display assistant message and "Continue" button
                         except Exception as e:
-                            st.error(f"Error generating or playing speech: {e}")
+                            st.error(f"Error generating or playing speech: {e}. Falling back to text-only.")
                             st.session_state.messages.append({"role": "assistant", "content": response_text}) # Still add text response
-                            # Do not rerun if speech fails, continue with text only.
-                            # You might want to log the full exception: st.exception(e)
+                            # If speech generation fails, still increment and move on, but log the error
+                            st.session_state.awaiting_user_action = False # No audio to wait for
+                            st.session_state.user_message_count += 1
+                            st.rerun() # Proceed to next turn without waiting for audio
 
-
-                st.session_state.user_message_count += 1
-                st.rerun() # Rerun to update chat history and prepare for next input
             else:
                 st.warning("Please provide an answer before sending.")
-
-    # Check if the user message count reaches 5
-    if st.session_state.user_message_count >= 5:
+    # Case 3: Interview is complete (5 user messages reached)
+    else:
         st.session_state.chat_complete = True
 
-# --- Get Feedback ---
-# If the interview is complete, you'll see a button to get feedback.
+
+# Show "Get Feedback"
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
         st.write("Fetching feedback...")
 
-# --- Feedback Screen ---
-# Once feedback is requested, it will be generated and displayed.
+# Show feedback screen
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
 
