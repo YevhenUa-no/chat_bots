@@ -1,4 +1,4 @@
 streamlit
-openai
-streamlit-mic-recorder
+openai>=1.0.0 # Make sure you have OpenAI library version 1.0.0 or newer
 streamlit-js-eval
+streamlit-mic-recorder
