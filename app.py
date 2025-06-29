@@ -272,24 +272,33 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                         response_text = st.write_stream(stream) # Get the full response text
 
                         # Generate speech from the assistant's response
+                        # Ensure the directory exists if you're saving to a specific path
                         speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
-                        with client.audio.speech.create(
-                            model="tts-1",
-                            voice="alloy", # You can choose other voices like "onyx", "nova", "shimmer", "echo", "fable"
-                            input=response_text,
-                        ) as speech_stream:
-                            speech_stream.write_to_file(speech_file_path)
+                        try:
+                            with client.audio.speech.create(
+                                model="tts-1",
+                                voice="alloy", # You can choose other voices like "onyx", "nova", "shimmer", "echo", "fable"
+                                input=response_text,
+                            ) as speech_stream:
+                                speech_stream.write_to_file(speech_file_path)
 
-                        # Append the response and audio file path to messages
-                        st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
-                        
-                        # Immediately play the audio for the current response
-                        st.audio(speech_file_path, format="audio/mpeg", loop=False, autoplay=True)
+                            # Append the response and audio file path to messages
+                            st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
+                            
+                            # Immediately play the audio for the current response
+                            st.audio(speech_file_path, format="audio/mpeg", loop=False, autoplay=True)
+                        except Exception as e:
+                            st.error(f"Error generating or playing speech: {e}")
+                            st.session_state.messages.append({"role": "assistant", "content": response_text}) # Still add text response
+                            # Do not rerun if speech fails, continue with text only.
+                            # You might want to log the full exception: st.exception(e)
+
 
                 st.session_state.user_message_count += 1
                 st.rerun() # Rerun to update chat history and prepare for next input
             else:
                 st.warning("Please provide an answer before sending.")
+
     # Check if the user message count reaches 5
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
