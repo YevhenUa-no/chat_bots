@@ -5,8 +5,8 @@ from streamlit_mic_recorder import mic_recorder
 import os
 
 # Setting up the Streamlit page configuration
-st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
-st.title("Chatbot")
+st.set_page_config(page_title="Streamlit Interview Bot", page_icon="💬")
+st.title("Interview Bot")
 
 # Initialize session state variables
 if "setup_complete" not in st.session_state:
@@ -22,6 +22,12 @@ if "messages" not in st.session_state:
 # New session state for controlling the flow after assistant response
 if "awaiting_user_action" not in st.session_state:
     st.session_state.awaiting_user_action = False
+# Session state to hold the AI's last spoken text and audio path
+if "current_ai_response_text" not in st.session_state:
+    st.session_state.current_ai_response_text = ""
+if "current_ai_audio_path" not in st.session_state:
+    st.session_state.current_ai_audio_path = ""
+
 
 # Session state variables for initial personal information audio transcriptions
 if "name_audio_transcription" not in st.session_state:
@@ -78,7 +84,7 @@ def handle_audio_input_setup(slot_name, key):
     return getattr(st.session_state, f"{slot_name}_audio_transcription")
 
 
-# Setup stage for collecting user details
+# --- Setup Stage ---
 if not st.session_state.setup_complete:
     st.subheader('Personal Information')
 
@@ -175,14 +181,20 @@ if not st.session_state.setup_complete:
             streamlit_js_eval(js_expressions="parent.window.location.reload()")
 
 
-# Interview phase
+---
+
+## Interview Phase
+
+Here's the core interview logic, simplified for turn-based voice interaction.
+
+```python
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
 
     st.info(
     """
-    Start by introducing yourself
+    **Interview Started!** Please introduce yourself.
     """,
-    icon="👋",
+    icon="🎤",
     )
 
     # Initialize OpenAI client
@@ -202,27 +214,26 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             f"at the company {st.session_state['company']}")
             }]
 
-    # Display chat messages
+    # --- Display Past Messages (Text Only for History) ---
+    st.subheader("Conversation History")
     for message in st.session_state.messages:
-        if message["role"] != "system":
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                # Play audio for past assistant messages (if not currently awaiting action)
-                # This ensures audio doesn't replay when user clicks "Send" for new input
-                if message["role"] == "assistant" and "audio_file_path" in message:
-                    # Only autoplay the *most recent* assistant message, and only if we are awaiting user action
-                    # This prevents re-playing all prior assistant messages on every rerun.
-                    if st.session_state.awaiting_user_action and message == st.session_state.messages[-1]:
-                         st.audio(message["audio_file_path"], format="audio/mpeg", loop=False, autoplay=True, key=f"autoplay_{message['audio_file_path']}")
-                    else:
-                        st.audio(message["audio_file_path"], format="audio/mpeg", loop=False, autoplay=False, key=f"manualplay_{message['audio_file_path']}")
-
+        if message["role"] == "user":
+            st.markdown(f"**You:** {message['content']}")
+        elif message["role"] == "assistant" and "content" in message:
+            # Display text of assistant's past responses without replaying audio
+            st.markdown(f"**Interviewer:** {message['content']}")
+    st.markdown("---") # Separator for clarity
 
     # --- Interview Turn Logic ---
+
     # Case 1: Assistant has just responded, waiting for user to click "Continue"
     if st.session_state.awaiting_user_action:
-        st.info("Listen to the assistant's response, then click 'Continue' to proceed.")
-        # The st.audio for the latest message will autoplay from the loop above if awaiting_user_action is True
+        st.info("Please listen to the interviewer's response and click 'Continue' when you're ready.")
+
+        # Play the current AI response audio
+        if st.session_state.current_ai_audio_path and os.path.exists(st.session_state.current_ai_audio_path):
+            st.audio(st.session_state.current_ai_audio_path, format="audio/mpeg", loop=False, autoplay=True, key="current_ai_audio_player")
+        st.write(f"**Interviewer:** {st.session_state.current_ai_response_text}")
 
         if st.button("Continue Interview", key="continue_interview_button"):
             st.session_state.awaiting_user_action = False
@@ -232,6 +243,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # Case 2: Ready for user input (either initial turn or after clicking "Continue")
     elif st.session_state.user_message_count < 5:
+        st.subheader(f"Your Turn (Question {st.session_state.user_message_count + 1} of 5)")
         # Voice recording button for chat input
         mic_recorder_chat_output = mic_recorder(
             start_prompt="🎙️ Speak your answer",
@@ -243,7 +255,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
         if mic_recorder_chat_output and mic_recorder_chat_output['bytes']:
             audio_bytes = mic_recorder_chat_output['bytes']
-            temp_audio_file_path = "chat_audio_response.webm" # Use a generic name for chat audio
+            temp_audio_file_path = "chat_audio_response.webm"
             with open(temp_audio_file_path, "wb") as f:
                 f.write(audio_bytes)
 
@@ -272,15 +284,15 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         if st.button("Send Answer", key=f"send_answer_button_{st.session_state.user_message_count}"):
             if user_prompt_input:
                 st.session_state.messages.append({"role": "user", "content": user_prompt_input})
-                with st.chat_message("user"):
-                    st.markdown(user_prompt_input)
+                # Display user's input immediately after sending
+                st.markdown(f"**You:** {user_prompt_input}")
 
                 # Reset current voice input after sending
                 st.session_state.current_chat_voice_input = ""
 
-                # Only get assistant response if there are turns left
+                # Only get assistant response if there are turns left for questions
                 if st.session_state.user_message_count < 4: # Before the 5th user message leads to feedback
-                    with st.chat_message("assistant"):
+                    with st.spinner("Interviewer is thinking..."):
                         stream = client.chat.completions.create(
                             model=st.session_state["openai_model"],
                             messages=[
@@ -289,20 +301,28 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             ],
                             stream=True,
                         )
-                        response_text = st.write_stream(stream) # Get the full response text
+                        # Accumulate stream response to get full text for TTS
+                        response_text = ""
+                        response_container = st.empty() # Placeholder for streaming text
+                        for chunk in stream:
+                            if chunk.choices[0].delta.content is not None:
+                                response_text += chunk.choices[0].delta.content
+                                response_container.markdown(f"**Interviewer:** {response_text}") # Update streamed text
 
                         # Generate speech from the assistant's response
                         speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
                         try:
                             with client.audio.speech.create(
                                 model="tts-1",
-                                voice="alloy", # You can choose other voices like "onyx", "nova", "shimmer", "echo", "fable"
+                                voice="alloy",
                                 input=response_text,
                             ) as speech_stream:
                                 speech_stream.write_to_file(speech_file_path)
 
-                            # Append the response and audio file path to messages
+                            # Store the response and audio file path
                             st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
+                            st.session_state.current_ai_response_text = response_text
+                            st.session_state.current_ai_audio_path = speech_file_path
                             
                             # Set flag to await user action after assistant speaks
                             st.session_state.awaiting_user_action = True
@@ -310,9 +330,8 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                         except Exception as e:
                             st.error(f"Error generating or playing speech: {e}. Falling back to text-only.")
                             st.session_state.messages.append({"role": "assistant", "content": response_text}) # Still add text response
-                            # If speech generation fails, still increment and move on, but log the error
-                            st.session_state.awaiting_user_action = False # No audio to wait for
-                            st.session_state.user_message_count += 1
+                            st.session_state.awaiting_user_action = False # No audio to wait for if speech fails
+                            st.session_state.user_message_count += 1 # Advance turn even if speech fails
                             st.rerun() # Proceed to next turn without waiting for audio
 
             else:
@@ -322,6 +341,13 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         st.session_state.chat_complete = True
 
 
+---
+
+## Feedback and Restart
+
+These sections remain unchanged.
+
+```python
 # Show "Get Feedback"
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
@@ -331,7 +357,12 @@ if st.session_state.chat_complete and not st.session_state.feedback_shown:
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
 
-    conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages])
+    # Filter out system messages and audio paths for feedback generation
+    feedback_messages_for_llm = [
+        {"role": msg["role"], "content": msg["content"]}
+        for msg in st.session_state.messages if msg["role"] != "system"
+    ]
+    conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in feedback_messages_for_llm])
 
     feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
