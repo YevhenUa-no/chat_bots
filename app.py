@@ -181,13 +181,7 @@ if not st.session_state.setup_complete:
             streamlit_js_eval(js_expressions="parent.window.location.reload()")
 
 
----
-
-## Interview Phase
-
-Here's the core interview logic, simplified for turn-based voice interaction.
-
-```python
+# --- Interview Phase ---
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
 
     st.info(
@@ -303,11 +297,11 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                         )
                         # Accumulate stream response to get full text for TTS
                         response_text = ""
-                        response_container = st.empty() # Placeholder for streaming text
+                        response_placeholder = st.empty() # Use a placeholder to update streamed text
                         for chunk in stream:
                             if chunk.choices[0].delta.content is not None:
                                 response_text += chunk.choices[0].delta.content
-                                response_container.markdown(f"**Interviewer:** {response_text}") # Update streamed text
+                                response_placeholder.markdown(f"**Interviewer:** {response_text}") # Update streamed text
 
                         # Generate speech from the assistant's response
                         speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
@@ -341,19 +335,11 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         st.session_state.chat_complete = True
 
 
----
-
-## Feedback and Restart
-
-These sections remain unchanged.
-
-```python
-# Show "Get Feedback"
+# --- Feedback and Restart ---
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
         st.write("Fetching feedback...")
 
-# Show feedback screen
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
 
