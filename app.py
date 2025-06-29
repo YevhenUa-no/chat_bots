@@ -290,27 +290,18 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                 st.rerun() # Rerun to update chat history and prepare for next input
             else:
                 st.warning("Please provide an answer before sending.")
-
     # Check if the user message count reaches 5
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
 
----
-
-### Get Feedback
-
-If the interview is complete, you'll see a button to get feedback.
-
-If st.session_state.chat_complete and not st.session_state.feedback_shown:
+# --- Get Feedback ---
+# If the interview is complete, you'll see a button to get feedback.
+if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
         st.write("Fetching feedback...")
 
----
-
-### Feedback Screen
-
-Once feedback is requested, it will be generated and displayed.
-
+# --- Feedback Screen ---
+# Once feedback is requested, it will be generated and displayed.
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
 
