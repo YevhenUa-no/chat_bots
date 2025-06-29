@@ -236,7 +236,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.rerun()
 
     # Case 2: Ready for user input (either initial turn or after clicking "Continue")
-    elif st.session_state.user_message_count < 5:
+    elif st.session_state.user_message_count < 5: # This allows for 5 user inputs (0, 1, 2, 3, 4)
         st.subheader(f"Your Turn (Question {st.session_state.user_message_count + 1} of 5)")
         # Voice recording button for chat input
         mic_recorder_chat_output = mic_recorder(
@@ -284,8 +284,8 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                 # Reset current voice input after sending
                 st.session_state.current_chat_voice_input = ""
 
-                # Only get assistant response if there are turns left for questions
-                if st.session_state.user_message_count < 4: # Before the 5th user message leads to feedback
+                # MODIFIED LINE HERE: Allow assistant to respond to the 5th user message as well
+                if st.session_state.user_message_count < 5: # This was previously < 4
                     with st.spinner("Interviewer is thinking..."):
                         stream = client.chat.completions.create(
                             model=st.session_state["openai_model"],
@@ -328,9 +328,17 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             st.session_state.user_message_count += 1 # Advance turn even if speech fails
                             st.rerun() # Proceed to next turn without waiting for audio
 
+                else: # This block is executed if user_message_count is 5 or more (i.e., after the 5th user message is sent)
+                    # If this is the 5th user input and the assistant has responded,
+                    # or if the condition above was met, this logic should run.
+                    # We need to set chat_complete here as well, if no assistant response is expected.
+                    st.session_state.chat_complete = True
+                    st.rerun() # Trigger a rerun to show the feedback button
             else:
                 st.warning("Please provide an answer before sending.")
-    # Case 3: Interview is complete (5 user messages reached)
+
+    # Case 3: Interview is complete (5 user messages reached and continue clicked after 5th AI response)
+    # This 'else' covers the state when user_message_count becomes 5 after clicking "Continue"
     else:
         st.session_state.chat_complete = True
 
