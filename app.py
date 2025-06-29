@@ -1,8 +1,8 @@
 import streamlit as st
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
-from streamlit_mic_recorder import mic_recorder # Import the mic_recorder
-import os # Import os for removing temporary audio files
+from streamlit_mic_recorder import mic_recorder
+import os
 
 # Setting up the Streamlit page configuration
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
@@ -20,13 +20,17 @@ if "chat_complete" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# New session state variables for individual audio transcriptions
+# Session state variables for initial personal information audio transcriptions
 if "name_audio_transcription" not in st.session_state:
     st.session_state.name_audio_transcription = ""
 if "experience_audio_transcription" not in st.session_state:
     st.session_state.experience_audio_transcription = ""
 if "skills_audio_transcription" not in st.session_state:
     st.session_state.skills_audio_transcription = ""
+
+# New session state for temporary voice input during the chat interview
+if "current_chat_voice_input" not in st.session_state:
+    st.session_state.current_chat_voice_input = ""
 
 # Helper functions to update session state
 def complete_setup():
@@ -35,8 +39,8 @@ def complete_setup():
 def show_feedback():
     st.session_state.feedback_shown = True
 
-# Function to handle audio recording and transcription
-def handle_audio_input(slot_name, key):
+# Function to handle audio recording and transcription for initial setup
+def handle_audio_input_setup(slot_name, key):
     mic_recorder_output = mic_recorder(
         start_prompt="🎙️ Speak",
         stop_prompt="⏹️ Stop",
@@ -92,7 +96,7 @@ if not st.session_state.setup_complete:
         st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200, key="skills_text_input")
     else: # input_method == "Speak"
         st.write("### Name")
-        current_name_transcription = handle_audio_input("name", "mic_recorder_name")
+        current_name_transcription = handle_audio_input_setup("name", "mic_recorder_name")
         st.session_state["name"] = st.text_input(
             label="Name (from audio or manual edit)",
             value=st.session_state["name"] if st.session_state["name"] else current_name_transcription,
@@ -102,7 +106,7 @@ if not st.session_state.setup_complete:
         st.markdown("---")
 
         st.write("### Experience")
-        current_experience_transcription = handle_audio_input("experience", "mic_recorder_experience")
+        current_experience_transcription = handle_audio_input_setup("experience", "mic_recorder_experience")
         st.session_state["experience"] = st.text_area(
             label="Experience (from audio or manual edit)",
             value=st.session_state["experience"] if st.session_state["experience"] else current_experience_transcription,
@@ -112,7 +116,7 @@ if not st.session_state.setup_complete:
         st.markdown("---")
 
         st.write("### Skills")
-        current_skills_transcription = handle_audio_input("skills", "mic_recorder_skills")
+        current_skills_transcription = handle_audio_input_setup("skills", "mic_recorder_skills")
         st.session_state["skills"] = st.text_area(
             label="Skills (from audio or manual edit)",
             value=st.session_state["skills"] if st.session_state["skills"] else current_skills_transcription,
@@ -201,28 +205,75 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    # Handle user input and OpenAI response
+    # Handle user input (voice or text) and OpenAI response
     if st.session_state.user_message_count < 5:
-        if prompt := st.chat_input("Your response", max_chars=1000):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+        # Voice recording button for chat input
+        mic_recorder_chat_output = mic_recorder(
+            start_prompt="🎙️ Speak your answer",
+            stop_prompt="⏹️ Stop Recording",
+            just_once=True,
+            use_container_width=True,
+            key=f"mic_recorder_chat_turn_{st.session_state.user_message_count}" # Unique key for each turn
+        )
 
-            if st.session_state.user_message_count < 4:
-                with st.chat_message("assistant"):
-                    stream = client.chat.completions.create(
-                        model=st.session_state["openai_model"],
-                        messages=[
-                            {"role": m["role"], "content": m["content"]}
-                            for m in st.session_state.messages
-                        ],
-                        stream=True,
-                    )
-                    response = st.write_stream(stream)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+        if mic_recorder_chat_output and mic_recorder_chat_output['bytes']:
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+            audio_bytes = mic_recorder_chat_output['bytes']
+            temp_audio_file_path = "chat_audio_response.webm" # Use a generic name for chat audio
+            with open(temp_audio_file_path, "wb") as f:
+                f.write(audio_bytes)
 
-            st.session_state.user_message_count += 1
+            with st.spinner("Transcribing your answer..."):
+                audio_file = open(temp_audio_file_path, "rb")
+                transcribed_text = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
+                ).text
+                audio_file.close()
+                os.remove(temp_audio_file_path)
 
+            st.session_state.current_chat_voice_input = transcribed_text
+            st.rerun() # Rerun to update the text area with transcription
+
+        # Text input area (pre-filled with transcription if available)
+        user_prompt_input = st.text_area(
+            "Your answer:",
+            value=st.session_state.current_chat_voice_input,
+            placeholder="Type your response here or speak it...",
+            max_chars=1000,
+            key=f"chat_text_area_{st.session_state.user_message_count}" # Unique key for each turn
+        )
+
+        # "Send" button to process the input
+        if st.button("Send Answer", key=f"send_answer_button_{st.session_state.user_message_count}"):
+            if user_prompt_input:
+                st.session_state.messages.append({"role": "user", "content": user_prompt_input})
+                with st.chat_message("user"):
+                    st.markdown(user_prompt_input)
+
+                # Reset current voice input after sending
+                st.session_state.current_chat_voice_input = ""
+
+                # Only get assistant response if there are turns left
+                if st.session_state.user_message_count < 4:
+                    with st.chat_message("assistant"):
+                        stream = client.chat.completions.create(
+                            model=st.session_state["openai_model"],
+                            messages=[
+                                {"role": m["role"], "content": m["content"]}
+                                for m in st.session_state.messages
+                            ],
+                            stream=True,
+                        )
+                        response = st.write_stream(stream)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+
+                st.session_state.user_message_count += 1
+                st.rerun() # Rerun to update chat history and prepare for next input
+            else:
+                st.warning("Please provide an answer before sending.")
+
+    # Check if the user message count reaches 5
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
 
@@ -255,5 +306,6 @@ if st.session_state.feedback_shown:
 
     st.write(feedback_completion.choices[0].message.content)
 
+    # Button to restart the interview
     if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
