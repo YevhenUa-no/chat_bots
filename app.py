@@ -2,7 +2,7 @@ import streamlit as st
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 from streamlit_mic_recorder import mic_recorder
-import os
+import os # Import os for removing temporary audio files
 
 # Setting up the Streamlit page configuration
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
@@ -204,6 +204,10 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         if message["role"] != "system":
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+                # Add audio playback for assistant messages
+                if message["role"] == "assistant" and "audio_file_path" in message:
+                    st.audio(message["audio_file_path"], format="audio/mpeg", loop=False, autoplay=False)
+
 
     # Handle user input (voice or text) and OpenAI response
     if st.session_state.user_message_count < 5:
@@ -265,8 +269,22 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             ],
                             stream=True,
                         )
-                        response = st.write_stream(stream)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                        response_text = st.write_stream(stream) # Get the full response text
+
+                        # Generate speech from the assistant's response
+                        speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
+                        with client.audio.speech.create(
+                            model="tts-1",
+                            voice="alloy", # You can choose other voices like "onyx", "nova", "shimmer", "echo", "fable"
+                            input=response_text,
+                        ) as speech_stream:
+                            speech_stream.write_to_file(speech_file_path)
+
+                        # Append the response and audio file path to messages
+                        st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
+                        
+                        # Immediately play the audio for the current response
+                        st.audio(speech_file_path, format="audio/mpeg", loop=False, autoplay=True)
 
                 st.session_state.user_message_count += 1
                 st.rerun() # Rerun to update chat history and prepare for next input
@@ -277,12 +295,22 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
 
-# Show "Get Feedback"
-if st.session_state.chat_complete and not st.session_state.feedback_shown:
+---
+
+### Get Feedback
+
+If the interview is complete, you'll see a button to get feedback.
+
+If st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
         st.write("Fetching feedback...")
 
-# Show feedback screen
+---
+
+### Feedback Screen
+
+Once feedback is requested, it will be generated and displayed.
+
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
 
@@ -308,4 +336,8 @@ if st.session_state.feedback_shown:
 
     # Button to restart the interview
     if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
+        # Before reloading, clean up generated audio files to prevent accumulation
+        for message in st.session_state.messages:
+            if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
+                os.remove(message["audio_file_path"])
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
