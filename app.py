@@ -3,6 +3,7 @@ from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 from streamlit_mic_recorder import mic_recorder
 import os
+import base64 # Import base64 for your auto_play_audio function
 
 # Setting up the Streamlit page configuration
 st.set_page_config(page_title="Streamlit Interview Bot", page_icon="💬")
@@ -47,6 +48,27 @@ def complete_setup():
 
 def show_feedback():
     st.session_state.feedback_shown = True
+
+# --- Convert text to audio (Provided by user) ---
+def text_to_audio(client, text, audio_path, voice_type="alloy"): # Changed default voice to "alloy" for consistency
+    try:
+        response = client.audio.speech.create(model="tts-1", voice=voice_type, input=text)
+        response.stream_to_file(audio_path)
+    except Exception as e:
+        st.error(f"Error converting text to audio: {e}")
+
+# --- Autoplay audio (Provided by user) ---
+def auto_play_audio(audio_file_path):
+    if os.path.exists(audio_file_path):
+        with open(audio_file_path, "rb") as audio_file:
+            audio_bytes = audio_file.read()
+        base64_audio = base64.b64encode(audio_bytes).decode("utf-8")
+        # Added a timestamp to the key to ensure it's always new and triggers autoplay
+        audio_html = f'<audio src="data:audio/mp3;base64,{base64_audio}" controls autoplay></audio>'
+        st.markdown(audio_html, unsafe_allow_html=True)
+    else:
+        st.error(f"Error: Audio file not found at {audio_file_path}")
+
 
 # Function to handle audio recording and transcription for initial setup
 def handle_audio_input_setup(slot_name, key):
@@ -224,9 +246,9 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     if st.session_state.awaiting_user_action:
         st.info("Please listen to the interviewer's response and click 'Continue' when you're ready.")
 
-        # Play the current AI response audio
+        # Play the current AI response audio using your auto_play_audio function
         if st.session_state.current_ai_audio_path and os.path.exists(st.session_state.current_ai_audio_path):
-            st.audio(st.session_state.current_ai_audio_path, format="audio/mpeg", loop=False, autoplay=True, key="current_ai_audio_player")
+            auto_play_audio(st.session_state.current_ai_audio_path) # Using your provided function
         st.write(f"**Interviewer:** {st.session_state.current_ai_response_text}")
 
         if st.button("Continue Interview", key="continue_interview_button"):
@@ -284,8 +306,8 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                 # Reset current voice input after sending
                 st.session_state.current_chat_voice_input = ""
 
-                # MODIFIED LINE HERE: Allow assistant to respond to the 5th user message as well
-                if st.session_state.user_message_count < 5: # This was previously < 4
+                # Allow assistant to respond to the 5th user message as well
+                if st.session_state.user_message_count < 5: # This was previously < 4, now changed for 5 questions
                     with st.spinner("Interviewer is thinking..."):
                         stream = client.chat.completions.create(
                             model=st.session_state["openai_model"],
@@ -303,16 +325,11 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                                 response_text += chunk.choices[0].delta.content
                                 response_placeholder.markdown(f"**Interviewer:** {response_text}") # Update streamed text
 
-                        # Generate speech from the assistant's response
+                        # Generate speech from the assistant's response using your text_to_audio function
                         speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
                         try:
-                            with client.audio.speech.create(
-                                model="tts-1",
-                                voice="alloy",
-                                input=response_text,
-                            ) as speech_stream:
-                                speech_stream.write_to_file(speech_file_path)
-
+                            text_to_audio(client, response_text, speech_file_path, voice_type="alloy") # Using your function
+                            
                             # Store the response and audio file path
                             st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
                             st.session_state.current_ai_response_text = response_text
@@ -328,17 +345,13 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             st.session_state.user_message_count += 1 # Advance turn even if speech fails
                             st.rerun() # Proceed to next turn without waiting for audio
 
-                else: # This block is executed if user_message_count is 5 or more (i.e., after the 5th user message is sent)
-                    # If this is the 5th user input and the assistant has responded,
-                    # or if the condition above was met, this logic should run.
-                    # We need to set chat_complete here as well, if no assistant response is expected.
+                else: # This block is executed after the 5th user message is sent, if no more AI response is expected
                     st.session_state.chat_complete = True
                     st.rerun() # Trigger a rerun to show the feedback button
             else:
                 st.warning("Please provide an answer before sending.")
 
-    # Case 3: Interview is complete (5 user messages reached and continue clicked after 5th AI response)
-    # This 'else' covers the state when user_message_count becomes 5 after clicking "Continue"
+    # Case 3: Interview is complete (user_message_count becomes 5 after clicking "Continue" button for the 5th turn)
     else:
         st.session_state.chat_complete = True
 
