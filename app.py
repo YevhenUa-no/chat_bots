@@ -1,9 +1,11 @@
 import streamlit as st
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
-from streamlit_mic_recorder import mic_recorder
+from streamlit_mic_recorder import mic_recorder # This is the correct import for mic_recorder
 import os
 import base64 # Import base64 for your auto_play_audio function
+
+# REMOVE THIS LINE: from audio_recorder_streamlit import audio_recorder # <--- DELETE THIS LINE
 
 # Setting up the Streamlit page configuration
 st.set_page_config(page_title="Streamlit Interview Bot", page_icon="💬")
