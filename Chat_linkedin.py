@@ -1,5 +1,6 @@
 import streamlit as st
-import openai
+from openai import OpenAI
+import os # This import is not strictly necessary for secrets, but good practice.
 # You would need to import a library for your chosen scraping service here, e.g.,
 # import your_scraping_service
 
@@ -11,8 +12,11 @@ if "OPENAI_API_KEY" not in st.secrets:
     st.error("OpenAI API key not found in Streamlit secrets. Please add it to your .streamlit/secrets.toml file.")
 else:
     # Load the API key from Streamlit secrets
-    openai.api_key = st.secrets["OPENAI_API_KEY"]
+    api_key = st.secrets["OPENAI_API_KEY"]
     
+    # Create an OpenAI client instance with the API key
+    client = OpenAI(api_key=api_key)
+
     # User input for the LinkedIn URL
     linkedin_url = st.text_input("Enter LinkedIn Profile URL:")
 
@@ -55,9 +59,9 @@ else:
                 Based on this information, please prepare 5-7 open-ended questions that an HR professional can use to assess this candidate. The questions should be tailored to their experience and role.
                 """
     
-                # Step 3: Call the OpenAI API
+                # Step 3: Call the OpenAI API using the client instance
                 try:
-                    response = openai.ChatCompletion.create(
+                    response = client.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
                             {"role": "system", "content": "You are a helpful HR assistant."},
@@ -70,7 +74,7 @@ else:
                     st.subheader("Generated Interview Questions")
                     st.markdown(questions)
                 
-                except openai.error.AuthenticationError:
+                except openai.AuthenticationError:
                     st.error("Invalid API key. Please check your key in the secrets.toml file.")
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
