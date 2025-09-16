@@ -159,39 +159,36 @@ if not st.session_state.setup_complete:
     # Company and Position Section
     st.subheader('Company and Position')
 
-    # Initialize session state for company and position information and setting default values
+    # Initialize session state for company and position information
     if "level" not in st.session_state:
-        st.session_state["level"] = "Junior"
+        st.session_state["level"] = ""
     if "position" not in st.session_state:
-        st.session_state["position"] = "Data Scientist"
+        st.session_state["position"] = ""
     if "company" not in st.session_state:
-        st.session_state["company"] = "Amazon"
+        st.session_state["company"] = ""
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.session_state["level"] = st.radio(
-            "Choose level",
-            key="level_radio",
-            options=["Junior", "Mid-level", "Senior"],
-            index=["Junior", "Mid-level", "Senior"].index(st.session_state["level"])
-        )
-
-    with col2:
-        st.session_state["position"] = st.selectbox(
-            "Choose a position",
-            ("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst"),
-            index=("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst").index(st.session_state["position"]),
-            key="position_selectbox"
-        )
-
-    st.session_state["company"] = st.selectbox(
-        "Select a Company",
-        ("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify"),
-        index=("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify").index(st.session_state["company"]),
-        key="company_selectbox"
+    # Replace dropdowns and radio buttons with text inputs
+    st.session_state["company"] = st.text_input(
+        label="Company Name",
+        value=st.session_state["company"],
+        placeholder="e.g., Google",
+        key="company_text_input"
     )
 
-    # New: Add an input for the job post information
+    st.session_state["position"] = st.text_input(
+        label="Position Title",
+        value=st.session_state["position"],
+        placeholder="e.g., Senior Software Engineer",
+        key="position_text_input"
+    )
+
+    st.session_state["level"] = st.text_input(
+        label="Level (e.g., Junior, Mid-level, Senior)",
+        value=st.session_state["level"],
+        placeholder="e.g., Senior",
+        key="level_text_input"
+    )
+
     st.session_state["job_post"] = st.text_area(
         label="Job Post Description (Optional)",
         value=st.session_state["job_post"],
@@ -199,6 +196,7 @@ if not st.session_state.setup_complete:
         max_chars=2000,
         key="job_post_text_area"
     )
+
 
     # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup, key="start_interview_button"):
@@ -238,7 +236,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         )
         # Conditionally add the job post information to the prompt
         if st.session_state["job_post"]:
-            system_prompt_content += f"The job post description is as follows: {st.session_state['job_post']}."
+            system_prompt_content += f" The job post description is as follows: {st.session_state['job_post']}."
 
         st.session_state.messages = [{
             "role": "system",
