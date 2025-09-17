@@ -171,5 +171,3 @@ else:
         st.session_state.is_listening = False
         st.session_state.setup_complete = False
         st.rerun()
-
-This video demonstrates how to build a real-time computer vision web app with Streamlit and `streamlit-webrtc`, which can provide insights into managing real-time data streams within the Streamlit framework.
