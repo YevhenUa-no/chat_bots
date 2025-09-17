@@ -20,8 +20,19 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 WEBSOCKET_URL = "wss://api.openai.com/v1/realtime"
 REALTIME_MODEL = "gpt-realtime"
 
-# --- Shared State (Thread-safe) ---
-# Use a thread-safe queue to pass messages from the WebSocket thread to the Streamlit app
+# --- Session State Initialization ---
+# This is the crucial fix: Initialize all session state variables at the start.
+if 'setup_complete' not in st.session_state:
+    st.session_state.setup_complete = False
+if 'websocket_thread' not in st.session_state:
+    st.session_state.websocket_thread = None
+if 'conversation_history' not in st.session_state:
+    st.session_state.conversation_history = []
+if 'is_listening' not in st.session_state:
+    st.session_state.is_listening = False
+# Initialize the websocket_connection attribute to prevent the error
+if 'websocket_connection' not in st.session_state:
+    st.session_state.websocket_connection = None
 if 'message_queue' not in st.session_state:
     st.session_state.message_queue = queue.Queue()
 
@@ -39,7 +50,7 @@ def run_websocket(personal_info):
             f"You are an HR executive interviewing an interviewee named {personal_info['name']} "
             f"with experience: {personal_info['experience']} and skills: {personal_info['skills']}. "
             f"Interview them for the {personal_info['level']} {personal_info['position']} "
-            f"at {personal_info['company']}."
+            f"at the company {personal_info['company']}."
         )
         
         initial_config = {
@@ -69,8 +80,9 @@ def run_websocket(personal_info):
     except Exception as e:
         print(f"WebSocket thread error: {e}")
     finally:
-        if ws and ws.connected:
-            ws.close()
+        if 'websocket_connection' in st.session_state and st.session_state.websocket_connection:
+            st.session_state.websocket_connection.close()
+            st.session_state.websocket_connection = None
 
 # --- Audio Processor Class for streamlit-webrtc ---
 class AudioProcessor:
@@ -91,12 +103,7 @@ class AudioProcessor:
         return None
 
 # --- Streamlit UI and Logic ---
-if "setup_complete" not in st.session_state:
-    st.session_state.setup_complete = False
-    st.session_state.websocket_thread = None
-    st.session_state.conversation_history = []
-    st.session_state.is_listening = False
-    
+
 # Setup Phase
 if not st.session_state.setup_complete:
     st.subheader('Personal Information')
@@ -118,7 +125,6 @@ else:
     
     # Initialize a WebSocket connection in a separate thread if not already running
     if st.session_state.websocket_thread is None:
-        st.session_state.is_listening = True
         personal_info = {
             'name': st.session_state['name'],
             'experience': st.session_state['experience'],
@@ -132,6 +138,7 @@ else:
             target=run_websocket, args=(personal_info,), daemon=True
         )
         st.session_state.websocket_thread.start()
+        st.session_state.is_listening = True
 
     # Use streamlit-webrtc for continuous audio streaming
     webrtc_ctx = webrtc_streamer(
@@ -150,12 +157,11 @@ else:
     while not st.session_state.message_queue.empty():
         message = st.session_state.message_queue.get()
         if message["type"] == "text.delta":
-            if not st.session_state.conversation_history or st.session_state.conversation_history[-1]["role"] != message["role"]:
-                st.session_state.conversation_history.append({"role": message["role"], "content": ""})
+            if not st.session_state.conversation_history or st.session_state.conversation_history[-1].get("role") != message.get("role"):
+                st.session_state.conversation_history.append({"role": message.get("role", "unknown"), "content": ""})
             st.session_state.conversation_history[-1]["content"] += message["delta"]
         elif message["type"] == "audio.delta":
             # This part is a placeholder. Streaming audio playback is not simple.
-            # You would need a custom component here.
             st.audio(base64.b64decode(message["delta"]), format="audio/wav")
 
     # Display conversation history
