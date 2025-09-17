@@ -1,7 +1,7 @@
 ## 🎙️ Streamlit Interview Bot
 ## A conversational AI interview coach that helps you prepare for your next big job opportunity. Built with Python, Streamlit, and the power of OpenAI's language and speech models.
 
-https://raw.githubusercontent.com/YevhenUa-no/chat_bots/main/ME.gif 
+![My GIF](https://raw.githubusercontent.com/YevhenUa-no/chat_bots/main/ME.gif) 
 
 
 Key Features
