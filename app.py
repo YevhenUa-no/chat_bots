@@ -8,6 +8,7 @@ import av
 import os
 import threading
 import queue
+import time
 
 # Set up the Streamlit page configuration
 st.set_page_config(page_title="Streamlit Realtime Bot", page_icon="💬")
@@ -35,6 +36,8 @@ if 'websocket_connection' not in st.session_state:
     st.session_state.websocket_connection = None
 if 'message_queue' not in st.session_state:
     st.session_state.message_queue = queue.Queue()
+if 'connection_ready' not in st.session_state:
+    st.session_state.connection_ready = False
 
 # --- WebSocket Thread Manager ---
 def run_websocket(personal_info):
@@ -44,6 +47,7 @@ def run_websocket(personal_info):
             extra_headers={"Authorization": f"Bearer {OPENAI_API_KEY}"}
         )
         st.session_state.websocket_connection = ws
+        st.session_state.connection_ready = True
 
         # Initial message to configure the session with personal info and system prompt
         system_prompt = (
@@ -79,25 +83,31 @@ def run_websocket(personal_info):
 
     except Exception as e:
         print(f"WebSocket thread error: {e}")
+        st.session_state.connection_ready = False
     finally:
         if 'websocket_connection' in st.session_state and st.session_state.websocket_connection:
             st.session_state.websocket_connection.close()
             st.session_state.websocket_connection = None
+        st.session_state.connection_ready = False
 
 # --- Audio Processor Class for streamlit-webrtc ---
 class AudioProcessor:
-    def __init__(self, ws_connection):
-        self.ws_connection = ws_connection
+    def __init__(self):
+        pass
 
     def recv(self, frame: av.AudioFrame):
-        if self.ws_connection and self.ws_connection.connected:
+        # Check if WebSocket connection is ready and available
+        if (hasattr(st.session_state, 'websocket_connection') and 
+            st.session_state.websocket_connection and 
+            st.session_state.websocket_connection.connected):
+            
             audio_data = frame.to_ndarray(format="s16le")
             audio_message = {
                 "type": "audio.input.delta",
                 "delta": base64.b64encode(audio_data.tobytes()).decode("utf-8")
             }
             try:
-                self.ws_connection.send(json.dumps(audio_message))
+                st.session_state.websocket_connection.send(json.dumps(audio_message))
             except Exception as e:
                 print(f"Error sending audio: {e}")
         return None
@@ -140,18 +150,24 @@ else:
         st.session_state.websocket_thread.start()
         st.session_state.is_listening = True
 
-    # Use streamlit-webrtc for continuous audio streaming
-    webrtc_ctx = webrtc_streamer(
-        key="realtime-audio",
-        audio_receiver_size=256,
-        media_stream_constraints={"audio": True, "video": False},
-        sendback_audio=False,
-        # Pass the WebSocket connection to the audio processor
-        audio_processor_factory=lambda: AudioProcessor(st.session_state.websocket_connection)
-    )
-
-    if st.session_state.is_listening:
-        st.info("The interview is live. Start talking!")
+    # Wait for connection to be ready before starting WebRTC
+    if st.session_state.connection_ready:
+        # Use streamlit-webrtc for continuous audio streaming
+        webrtc_ctx = webrtc_streamer(
+            key="realtime-audio",
+            audio_receiver_size=256,
+            media_stream_constraints={"audio": True, "video": False},
+            sendback_audio=False,
+            # Remove the WebSocket connection parameter from the factory
+            audio_processor_factory=lambda: AudioProcessor()
+        )
+        
+        if st.session_state.is_listening:
+            st.info("The interview is live. Start talking!")
+    else:
+        st.info("Connecting to the interview service... Please wait.")
+        time.sleep(0.1)  # Small delay to prevent rapid rerunning
+        st.rerun()
         
     # Process messages from the WebSocket thread
     while not st.session_state.message_queue.empty():
@@ -176,4 +192,6 @@ else:
             st.session_state.websocket_thread.join()
         st.session_state.is_listening = False
         st.session_state.setup_complete = False
+        st.session_state.websocket_thread = None
+        st.session_state.connection_ready = False
         st.rerun()
