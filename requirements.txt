@@ -1,4 +1,5 @@
 streamlit
+streamlit-webrtc>=0.31.5
+websockets>=15.0.1
+av
 openai
-streamlit-js-eval
-streamlit-mic-recorder # Add this
