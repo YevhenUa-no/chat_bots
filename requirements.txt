@@ -1,4 +1,4 @@
 streamlit
 openai
-streamlit-audiorecorder
-pydub
+streamlit-js-eval
+streamlit-mic-recorder
