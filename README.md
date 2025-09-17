@@ -2,7 +2,9 @@
 ## A conversational AI interview coach that helps you prepare for your next big job opportunity. Built with Python, Streamlit, and the power of OpenAI's language and speech models.
 
 ![My GIF](https://raw.githubusercontent.com/YevhenUa-no/chat_bots/main/ME.gif) 
-Credit for animation: https://brunopixels.tumblr.com/
+
+
+Streamlit page - https://chatbots-interview.streamlit.app/
 
 Key Features
 Voice-Powered Interface: Speak your answers and listen to the interviewer's questions, just like a real conversation.
@@ -14,4 +16,5 @@ Instant Feedback: Receive a score and detailed feedback on your performance afte
 Easy to Use: A simple, interactive interface to guide you through the process.
 
 
-Streamlit page - https://chatbots-interview.streamlit.app/
+
+Credit for animation: https://brunopixels.tumblr.com/
