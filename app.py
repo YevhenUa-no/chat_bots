@@ -22,94 +22,144 @@ WEBSOCKET_URL = "wss://api.openai.com/v1/realtime"
 REALTIME_MODEL = "gpt-realtime"
 
 # --- Session State Initialization ---
-# This is the crucial fix: Initialize all session state variables at the start.
 if 'setup_complete' not in st.session_state:
     st.session_state.setup_complete = False
-if 'websocket_thread' not in st.session_state:
-    st.session_state.websocket_thread = None
 if 'conversation_history' not in st.session_state:
     st.session_state.conversation_history = []
 if 'is_listening' not in st.session_state:
     st.session_state.is_listening = False
-# Initialize the websocket_connection attribute to prevent the error
-if 'websocket_connection' not in st.session_state:
-    st.session_state.websocket_connection = None
-if 'message_queue' not in st.session_state:
-    st.session_state.message_queue = queue.Queue()
-if 'connection_ready' not in st.session_state:
-    st.session_state.connection_ready = False
+if 'websocket_manager' not in st.session_state:
+    st.session_state.websocket_manager = None
 
-# --- WebSocket Thread Manager ---
-def run_websocket(personal_info):
-    try:
-        ws = connect(
-            WEBSOCKET_URL,
-            extra_headers={"Authorization": f"Bearer {OPENAI_API_KEY}"}
-        )
-        st.session_state.websocket_connection = ws
-        st.session_state.connection_ready = True
-
-        # Initial message to configure the session with personal info and system prompt
-        system_prompt = (
-            f"You are an HR executive interviewing an interviewee named {personal_info['name']} "
-            f"with experience: {personal_info['experience']} and skills: {personal_info['skills']}. "
-            f"Interview them for the {personal_info['level']} {personal_info['position']} "
-            f"at the company {personal_info['company']}."
-        )
+# --- WebSocket Manager Class ---
+class WebSocketManager:
+    def __init__(self):
+        self.websocket = None
+        self.message_queue = queue.Queue()
+        self.audio_queue = queue.Queue()
+        self.connection_ready = threading.Event()
+        self.stop_event = threading.Event()
         
-        initial_config = {
-            "type": "session.begin",
-            "model": REALTIME_MODEL,
-            "system_prompt": system_prompt,
-            "audio_format": "pcm_16khz_16bit_mono"
-        }
-        ws.send(json.dumps(initial_config))
+    def start_connection(self, personal_info):
+        self.thread = threading.Thread(
+            target=self._run_websocket, 
+            args=(personal_info,), 
+            daemon=True
+        )
+        self.thread.start()
+        
+    def _run_websocket(self, personal_info):
+        try:
+            ws = connect(
+                WEBSOCKET_URL,
+                extra_headers={"Authorization": f"Bearer {OPENAI_API_KEY}"}
+            )
+            self.websocket = ws
+            self.connection_ready.set()
 
-        # Initial message from the "interviewer"
-        hello_message = {
-            "type": "conversation.item.create",
-            "item": {
-                "type": "message",
-                "role": "assistant",
-                "content": "Hello, my name is Interviewer. Can you please introduce yourself?",
-            },
-        }
-        ws.send(json.dumps(hello_message))
+            # Initial message to configure the session with personal info and system prompt
+            system_prompt = (
+                f"You are an HR executive interviewing an interviewee named {personal_info['name']} "
+                f"with experience: {personal_info['experience']} and skills: {personal_info['skills']}. "
+                f"Interview them for the {personal_info['level']} {personal_info['position']} "
+                f"at the company {personal_info['company']}."
+            )
+            
+            initial_config = {
+                "type": "session.begin",
+                "model": REALTIME_MODEL,
+                "system_prompt": system_prompt,
+                "audio_format": "pcm_16khz_16bit_mono"
+            }
+            ws.send(json.dumps(initial_config))
 
-        while ws.connected:
-            message = ws.recv()
-            data = json.loads(message)
-            st.session_state.message_queue.put(data)
+            # Initial message from the "interviewer"
+            hello_message = {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": "Hello, my name is Interviewer. Can you please introduce yourself?",
+                },
+            }
+            ws.send(json.dumps(hello_message))
 
-    except Exception as e:
-        print(f"WebSocket thread error: {e}")
-        st.session_state.connection_ready = False
-    finally:
-        if 'websocket_connection' in st.session_state and st.session_state.websocket_connection:
-            st.session_state.websocket_connection.close()
-            st.session_state.websocket_connection = None
-        st.session_state.connection_ready = False
+            # Handle both WebSocket messages and audio queue
+            while ws.connected and not self.stop_event.is_set():
+                try:
+                    # Check for audio data to send
+                    try:
+                        audio_message = self.audio_queue.get_nowait()
+                        ws.send(json.dumps(audio_message))
+                    except queue.Empty:
+                        pass
+                    
+                    # Check for WebSocket messages (with timeout to allow audio processing)
+                    ws.settimeout(0.1)  # 100ms timeout
+                    try:
+                        message = ws.recv()
+                        data = json.loads(message)
+                        self.message_queue.put(data)
+                    except TimeoutError:
+                        continue  # Continue to check audio queue
+                        
+                except Exception as e:
+                    if not self.stop_event.is_set():
+                        print(f"WebSocket loop error: {e}")
+                    break
+
+        except Exception as e:
+            print(f"WebSocket thread error: {e}")
+        finally:
+            self.connection_ready.clear()
+            if self.websocket:
+                try:
+                    self.websocket.close()
+                except:
+                    pass
+                self.websocket = None
+    
+    def send_audio(self, audio_data):
+        if self.connection_ready.is_set():
+            audio_message = {
+                "type": "audio.input.delta",
+                "delta": base64.b64encode(audio_data).decode("utf-8")
+            }
+            try:
+                self.audio_queue.put_nowait(audio_message)
+            except queue.Full:
+                print("Audio queue full, dropping frame")
+    
+    def get_messages(self):
+        messages = []
+        try:
+            while True:
+                message = self.message_queue.get_nowait()
+                messages.append(message)
+        except queue.Empty:
+            pass
+        return messages
+    
+    def is_connected(self):
+        return self.connection_ready.is_set()
+    
+    def stop(self):
+        self.stop_event.set()
+        if hasattr(self, 'thread') and self.thread.is_alive():
+            self.thread.join(timeout=2)
 
 # --- Audio Processor Class for streamlit-webrtc ---
 class AudioProcessor:
-    def __init__(self):
-        pass
+    def __init__(self, websocket_manager):
+        self.websocket_manager = websocket_manager
 
     def recv(self, frame: av.AudioFrame):
-        # Check if WebSocket connection is ready and available
-        if (hasattr(st.session_state, 'websocket_connection') and 
-            st.session_state.websocket_connection and 
-            st.session_state.websocket_connection.connected):
-            
-            audio_data = frame.to_ndarray(format="s16le")
-            audio_message = {
-                "type": "audio.input.delta",
-                "delta": base64.b64encode(audio_data.tobytes()).decode("utf-8")
-            }
+        if self.websocket_manager and self.websocket_manager.is_connected():
             try:
-                st.session_state.websocket_connection.send(json.dumps(audio_message))
+                audio_data = frame.to_ndarray(format="s16le")
+                self.websocket_manager.send_audio(audio_data.tobytes())
             except Exception as e:
-                print(f"Error sending audio: {e}")
+                print(f"Error processing audio: {e}")
         return None
 
 # --- Streamlit UI and Logic ---
@@ -133,8 +183,9 @@ if not st.session_state.setup_complete:
 else:
     st.subheader("Realtime Conversation")
     
-    # Initialize a WebSocket connection in a separate thread if not already running
-    if st.session_state.websocket_thread is None:
+    # Initialize WebSocket manager if not already running
+    if st.session_state.websocket_manager is None:
+        st.session_state.websocket_manager = WebSocketManager()
         personal_info = {
             'name': st.session_state['name'],
             'experience': st.session_state['experience'],
@@ -143,55 +194,60 @@ else:
             'position': st.session_state['position'],
             'level': st.session_state['level']
         }
-        # Start the WebSocket in a new thread
-        st.session_state.websocket_thread = threading.Thread(
-            target=run_websocket, args=(personal_info,), daemon=True
-        )
-        st.session_state.websocket_thread.start()
+        st.session_state.websocket_manager.start_connection(personal_info)
         st.session_state.is_listening = True
 
-    # Wait for connection to be ready before starting WebRTC
-    if st.session_state.connection_ready:
+    # Check connection status
+    if st.session_state.websocket_manager.is_connected():
         # Use streamlit-webrtc for continuous audio streaming
         webrtc_ctx = webrtc_streamer(
             key="realtime-audio",
             audio_receiver_size=256,
             media_stream_constraints={"audio": True, "video": False},
             sendback_audio=False,
-            # Remove the WebSocket connection parameter from the factory
-            audio_processor_factory=lambda: AudioProcessor()
+            audio_processor_factory=lambda: AudioProcessor(st.session_state.websocket_manager)
         )
         
         if st.session_state.is_listening:
             st.info("The interview is live. Start talking!")
     else:
         st.info("Connecting to the interview service... Please wait.")
-        time.sleep(0.1)  # Small delay to prevent rapid rerunning
+        time.sleep(0.5)  # Wait a bit before checking again
         st.rerun()
         
-    # Process messages from the WebSocket thread
-    while not st.session_state.message_queue.empty():
-        message = st.session_state.message_queue.get()
-        if message["type"] == "text.delta":
-            if not st.session_state.conversation_history or st.session_state.conversation_history[-1].get("role") != message.get("role"):
-                st.session_state.conversation_history.append({"role": message.get("role", "unknown"), "content": ""})
-            st.session_state.conversation_history[-1]["content"] += message["delta"]
-        elif message["type"] == "audio.delta":
-            # This part is a placeholder. Streaming audio playback is not simple.
-            st.audio(base64.b64decode(message["delta"]), format="audio/wav")
+    # Process messages from the WebSocket manager
+    if st.session_state.websocket_manager:
+        messages = st.session_state.websocket_manager.get_messages()
+        for message in messages:
+            if message.get("type") == "response.text.delta":
+                # Handle text responses
+                if not st.session_state.conversation_history or st.session_state.conversation_history[-1].get("role") != "assistant":
+                    st.session_state.conversation_history.append({"role": "assistant", "content": ""})
+                st.session_state.conversation_history[-1]["content"] += message.get("delta", "")
+            elif message.get("type") == "input_audio_buffer.speech_started":
+                # User started speaking
+                if not st.session_state.conversation_history or st.session_state.conversation_history[-1].get("role") != "user":
+                    st.session_state.conversation_history.append({"role": "user", "content": "[Speaking...]"})
+            elif message.get("type") == "conversation.item.input_audio_transcription.completed":
+                # User speech transcription completed
+                if st.session_state.conversation_history and st.session_state.conversation_history[-1].get("role") == "user":
+                    st.session_state.conversation_history[-1]["content"] = message.get("transcript", "")
+            elif message.get("type") == "response.audio.delta":
+                # Handle audio responses - placeholder for now
+                pass
 
     # Display conversation history
     for message in st.session_state.conversation_history:
         st.markdown(f"**{message['role'].capitalize()}:** {message['content']}")
 
     if st.button("End Interview"):
-        # Stop the WebSocket thread and close the connection
-        if st.session_state.websocket_connection:
-            st.session_state.websocket_connection.close()
-        if st.session_state.websocket_thread:
-            st.session_state.websocket_thread.join()
+        # Stop the WebSocket manager
+        if st.session_state.websocket_manager:
+            st.session_state.websocket_manager.stop()
+        
+        # Reset session state
         st.session_state.is_listening = False
         st.session_state.setup_complete = False
-        st.session_state.websocket_thread = None
-        st.session_state.connection_ready = False
+        st.session_state.websocket_manager = None
+        st.session_state.conversation_history = []
         st.rerun()
