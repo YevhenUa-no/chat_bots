@@ -375,46 +375,46 @@ if st.session_state.feedback_shown:
     ]
     conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in feedback_messages_for_llm])
 
-feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-feedback_completion = feedback_client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {
-            "role": "system", 
-            "content": """You are an evaluation tool that provides structured, constructive feedback on an interviewee’s performance. 
-            
-            **Instructions:**
-            - Start with an **Overall Score (1–10)** based on the candidate’s performance. 
-            - Then provide **detailed feedback** in the following sections:
-              
-              1. **Strengths** – Highlight what the candidate did well (e.g., clear communication, problem-solving, technical knowledge, confidence).
-              2. **Weaknesses / Areas to Improve** – Point out specific behaviors, skills, or responses that could be improved. Be direct but professional.  
-              3. **Communication & Clarity** – Evaluate how clearly and confidently the candidate expressed ideas.  
-              4. **Problem-Solving & Critical Thinking** – Assess reasoning ability, creativity, and ability to handle challenges.  
-              5. **Professionalism & Attitude** – Comment on tone, adaptability, and overall demeanor.  
-              6. **Actionable Suggestions** – Provide concrete tips the candidate can use to improve for the next interview.  
+    feedback_completion = feedback_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": """You are an evaluation tool that provides structured, constructive feedback on an interviewee’s performance.
+                
+                **Instructions:**
+                - Start with an **Overall Score (1–10)** based on the candidate’s performance.
+                - Then provide **detailed feedback** in the following sections:
+                
+                  1. **Strengths** – Highlight what the candidate did well (e.g., clear communication, problem-solving, technical knowledge, confidence).
+                  2. **Weaknesses / Areas to Improve** – Point out specific behaviors, skills, or responses that could be improved. Be direct but professional.
+                  3. **Communication & Clarity** – Evaluate how clearly and confidently the candidate expressed ideas.
+                  4. **Problem-Solving & Critical Thinking** – Assess reasoning ability, creativity, and ability to handle challenges.
+                  5. **Professionalism & Attitude** – Comment on tone, adaptability, and overall demeanor.
+                  6. **Actionable Suggestions** – Provide concrete tips the candidate can use to improve for the next interview.
 
-            **Format Example:**
-            Overall Score: 7/10
+                **Format Example:**
+                Overall Score: 7/10
 
-            Feedback:
-            Strengths: ...
-            Weaknesses: ...
-            Communication & Clarity: ...
-            Problem-Solving & Critical Thinking: ...
-            Professionalism & Attitude: ...
-            Actionable Suggestions: ...
+                Feedback:
+                Strengths: ...
+                Weaknesses: ...
+                Communication & Clarity: ...
+                Problem-Solving & Critical Thinking: ...
+                Professionalism & Attitude: ...
+                Actionable Suggestions: ...
 
-            Do not ask any additional questions or engage in conversation.
-            """
-        },
-        {
-            "role": "user", 
-            "content": f"Here is the interview transcript to evaluate: {conversation_history}"
-        }
-    ]
-)
+                Do not ask any additional questions or engage in conversation.
+                """
+            },
+            {
+                "role": "user",
+                "content": f"Here is the interview transcript to evaluate: {conversation_history}"
+            }
+        ]
+    )
 
 
     feedback_text = feedback_completion.choices[0].message.content
@@ -437,5 +437,3 @@ feedback_completion = feedback_client.chat.completions.create(
             if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
                 os.remove(message["audio_file_path"])
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
-
-
