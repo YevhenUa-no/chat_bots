@@ -122,7 +122,7 @@ if not st.session_state.setup_complete:
 
 
     # Option to input via text or voice
-    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=0, key="input_method_radio") #If you want to add Speak ad default option for Personal Data input - change to index 1 
+    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=0, key="input_method_radio")
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
@@ -194,7 +194,7 @@ if not st.session_state.setup_complete:
 
     # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup, key="start_interview_button"):
-        if not (st.session_state["name"] or st.session_state["experience"] or st.session_state["skills"]):
+        if not (st.session_state["name"] and st.session_state["experience"] and st.session_state["skills"]):
             st.warning("Please provide your personal information before starting the interview.")
             st.session_state.setup_complete = False
         else:
@@ -237,21 +237,25 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             "content": system_prompt_content
         }]
 
-    # --- Display Past Messages (Text Only for History) ---
-    st.subheader("Conversation History")
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            st.markdown(f"**You:** {message['content']}")
-        elif message["role"] == "assistant" and "content" in message:
-            st.markdown(f"**Interviewer:** {message['content']}")
-    st.markdown("---")
-
     # --- Interview Turn Logic ---
+    # The new prompt structure starts here
+    interviewer_questions = [
+        "Hi, I'm Alex and I'm a Senior Software Engineer here at **[Company Name]**. It's great to meet you. We're a team that believes in constant learning and collaboration, especially through our code review process. Our goal is to build the highest quality code possible, and we see code reviews as a critical part of that. With that in mind, can you walk me through your process when you are asked to review a teammate's code? What are the key things you look for, and what's your approach to providing feedback?",
+        "We believe that a healthy team is one where people feel comfortable disagreeing and challenging ideas in a respectful way. Tell me about a time you had a technical disagreement with a teammate. How did you handle the situation, and what was the outcome?",
+        "In our industry, new technologies and tools are constantly emerging. Describe a time when you had to learn a new technology or framework quickly for a project. What was your process, and how did you ensure you were effective with it in a short amount of time?"
+    ]
+
+    # Dynamically set the question based on the user_message_count
+    # The first 3 questions are hardcoded, subsequent questions can be dynamic if needed
+    if st.session_state.user_message_count < len(interviewer_questions):
+        current_question = interviewer_questions[st.session_state.user_message_count]
+    else:
+        # If more questions are needed, you can add a generic prompt here
+        current_question = "Great, thanks for that. Do you have any questions for me?"
 
     # Case 1: Assistant has just responded, waiting for user to click "Continue"
     if st.session_state.awaiting_user_action:
         st.info("Please listen to the interviewer's response and click 'Next Question' when you're ready.")
-
         if st.session_state.current_ai_audio_path and os.path.exists(st.session_state.current_ai_audio_path):
             auto_play_audio(st.session_state.current_ai_audio_path)
         st.write(f"**Interviewer:** {st.session_state.current_ai_response_text}")
@@ -262,8 +266,12 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.rerun()
 
     # Case 2: Ready for user input (either initial turn or after clicking "Continue")
-    elif st.session_state.user_message_count < 5:
+    elif st.session_state.user_message_count < 5: # Limit to 5 turns for the chat
         st.subheader(f"Your Turn (Question {st.session_state.user_message_count + 1} of 5)")
+        
+        # Display the current question from the array
+        st.write(f"**Interviewer:** {current_question}")
+        
         mic_recorder_chat_output = mic_recorder(
             start_prompt="🎙️ Speak your answer",
             stop_prompt="⏹️ Stop Recording",
@@ -325,11 +333,10 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                         speech_file_path = f"assistant_response_{st.session_state.user_message_count}.mp3"
                         try:
                             text_to_audio(client, response_text, speech_file_path, voice_type="alloy")
-                            
+
                             st.session_state.messages.append({"role": "assistant", "content": response_text, "audio_file_path": speech_file_path})
                             st.session_state.current_ai_response_text = response_text
                             st.session_state.current_ai_audio_path = speech_file_path
-                            
                             st.session_state.awaiting_user_action = True
                             st.rerun()
                         except Exception as e:
@@ -338,7 +345,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             st.session_state.awaiting_user_action = False
                             st.session_state.user_message_count += 1
                             st.rerun()
-
                 else:
                     st.session_state.chat_complete = True
                     st.rerun()
@@ -387,7 +393,7 @@ if st.session_state.feedback_shown:
 
     feedback_text = feedback_completion.choices[0].message.content
     st.write(feedback_text)
-    
+
     # Generate and autoplay audio of the feedback
     feedback_audio_file = "feedback_summary.mp3"
     try:
@@ -396,7 +402,7 @@ if st.session_state.feedback_shown:
         auto_play_audio(feedback_audio_file)
     except Exception as e:
         st.error(f"Error generating feedback audio: {e}. Displaying text only.")
-        
+
     if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
         # Clean up all audio files on restart
         if st.session_state.feedback_audio_path and os.path.exists(st.session_state.feedback_audio_path):
