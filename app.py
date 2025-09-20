@@ -12,7 +12,6 @@ st.title("Interview Bot")
 # --- Function to restart the interview ---
 def restart_interview_with_initial_data():
     """Resets chat-related session state while preserving initial user input."""
-    # Resetting session state variables for the chat and feedback
     st.session_state.user_message_count = 0
     st.session_state.feedback_shown = False
     st.session_state.chat_complete = False
@@ -23,12 +22,10 @@ def restart_interview_with_initial_data():
     st.session_state.feedback_audio_path = ""
     st.session_state.current_chat_voice_input = ""
 
-    # Delete temporary audio files
     for filename in os.listdir():
         if filename.endswith(".mp3") or filename.endswith(".webm"):
             os.remove(filename)
 
-    # Re-initialize the system prompt with the preserved user data
     system_prompt_content = (
         f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
         f"with experience: {st.session_state['experience']} and skills: {st.session_state['skills']}. "
@@ -243,16 +240,17 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             initial_greeting_prompt = (
                 f"You are an HR executive from {st.session_state['company']} interviewing "
                 f"a candidate named {st.session_state['name']} for the position of {st.session_state['position']}. "
-                "Based on the candidate's skills and experience, ask the first interview question. "
-                "Do not introduce yourself or the company again. Just provide the first question directly. "
-                "Keep the tone welcoming and professional. A good example would be 'Tell me about a time you...' or 'How would you approach...'"
+                "Your first question should be a friendly greeting and a request for the candidate to introduce themselves. "
+                "The greeting should welcome them by name and mention the company and the position they are interviewing for. "
+                "For example: 'Hello [Candidate's Name], it's a pleasure to meet you. I'm from [Company] and I'll be conducting your interview for the [Position] position. Let's start with you telling me a little about yourself and your background.' "
+                "Keep it concise and professional. Do not ask a different question."
             )
 
             completion = client.chat.completions.create(
                 model=st.session_state["openai_model"],
                 messages=[
                     {"role": "system", "content": initial_greeting_prompt},
-                    {"role": "user", "content": f"Candidate's experience: {st.session_state['experience']}. Candidate's skills: {st.session_state['skills']}. Job post: {st.session_state['job_post']}"}
+                    {"role": "user", "content": f"Candidate's name: {st.session_state['name']}. Company: {st.session_state['company']}. Position: {st.session_state['position']}"}
                 ]
             )
             first_question = completion.choices[0].message.content
@@ -288,7 +286,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         st.subheader(f"Your Turn (Question {st.session_state.user_message_count + 1} of 5)")
 
         if st.session_state.user_message_count > 0: # Only display question for turns > 0
-            # Get the last assistant message (the question) from the message history
             last_assistant_message = [msg for msg in st.session_state.messages if msg["role"] == "assistant"][-1]["content"]
             st.write(f"**Interviewer:** {last_assistant_message}")
 
