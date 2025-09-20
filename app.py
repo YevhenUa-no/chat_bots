@@ -6,7 +6,7 @@ import os
 import base64
 
 # Setting up the Streamlit page configuration
-st.set_page_config(page_title="Interview Bot", page_icon="🤖")
+st.set_page_config(page_title="Streamlit Interview Bot", page_icon="💬")
 st.title("Interview Bot")
 
 # Initialize session state variables
@@ -51,7 +51,7 @@ if "current_chat_voice_input" not in st.session_state:
 # Helper functions to update session state
 def clear_audio_files():
     """Removes all generated audio files."""
-    audio_files = [f for f in os.listdir() if f.endswith((".mp3", ".webm")) and (f.startswith("assistant_") or f.startswith("chat_audio_") or f.startswith("audio_") or f == "feedback_summary.mp3")]
+    audio_files = [f for f in os.listdir() if f.endswith((".mp3", ".webm")) and (f.startswith("assistant_") or f.startswith("chat_audio_") or f.startswith("audio_") or f == "feedback_summary.mp3" or f == "assistant_initial_intro.mp3")]
     for f in audio_files:
         try:
             os.remove(f)
@@ -75,7 +75,6 @@ def show_feedback():
 
 def reset_interview_state_for_restart():
     """Resets all interview-specific session state variables."""
-    st.session_state.setup_complete = False
     st.session_state.user_message_count = 0
     st.session_state.feedback_shown = False
     st.session_state.chat_complete = False
@@ -84,7 +83,7 @@ def reset_interview_state_for_restart():
     st.session_state.current_ai_response_text = ""
     st.session_state.current_ai_audio_path = ""
     st.session_state.feedback_audio_path = ""
-    st.session_state.name_audio_transcription = ""
+    st.session_state.name_audio_transcription = "" # Clear these as they are tied to voice input in setup
     st.session_state.experience_audio_transcription = ""
     st.session_state.skills_audio_transcription = ""
     st.session_state.current_chat_voice_input = ""
@@ -93,6 +92,7 @@ def reset_interview_state_for_restart():
 def restart_full():
     """Restarts the entire application, clearing all inputs and interview state."""
     reset_interview_state_for_restart()
+    st.session_state.setup_complete = False # Go back to setup page
     st.session_state.initial_inputs = {} # Clear saved inputs as well
     st.session_state["name"] = ""
     st.session_state["experience"] = ""
@@ -105,19 +105,20 @@ def restart_full():
 
 
 def restart_with_same_inputs():
-    """Restarts the interview phase, keeping initial input data pre-filled."""
+    """Sends the user back to the setup page with initial input data pre-filled."""
     reset_interview_state_for_restart()
-    # Restore initial inputs
+    st.session_state.setup_complete = False # IMPORTANT: Go back to setup page
+
+    # Restore initial inputs into the current session state variables
     if st.session_state.initial_inputs:
-        st.session_state["name"] = st.session_state.initial_inputs["name"]
-        st.session_state["experience"] = st.session_state.initial_inputs["experience"]
-        st.session_state["skills"] = st.session_state.initial_inputs["skills"]
-        st.session_state["company"] = st.session_state.initial_inputs["company"]
-        st.session_state["position"] = st.session_state.initial_inputs["position"]
-        st.session_state["job_post"] = st.session_state.initial_inputs["job_post"]
-    # Set setup_complete to True to bypass setup phase immediately
-    st.session_state.setup_complete = True
-    # Rerun to apply changes and go to interview phase
+        st.session_state["name"] = st.session_state.initial_inputs.get("name", "")
+        st.session_state["experience"] = st.session_state.initial_inputs.get("experience", "")
+        st.session_state["skills"] = st.session_state.initial_inputs.get("skills", "")
+        st.session_state["company"] = st.session_state.initial_inputs.get("company", "")
+        st.session_state["position"] = st.session_state.initial_inputs.get("position", "")
+        st.session_state["job_post"] = st.session_state.initial_inputs.get("job_post", "")
+    
+    # Rerun to apply changes and go to the setup phase with pre-filled data
     st.rerun()
 
 
@@ -168,9 +169,10 @@ def handle_audio_input_setup(slot_name, key):
                 audio_file.close()
                 os.remove(temp_audio_file_path)
 
+            # Update both the transcription state and the main input state
             setattr(st.session_state, f"{slot_name}_audio_transcription", transcript.text)
+            st.session_state[slot_name] = transcript.text # Update main input
             st.write(f"**Transcription for {slot_name}:** {transcript.text}")
-            st.session_state[slot_name] = transcript.text
             st.rerun()
     return getattr(st.session_state, f"{slot_name}_audio_transcription")
 
@@ -179,7 +181,7 @@ def handle_audio_input_setup(slot_name, key):
 if not st.session_state.setup_complete:
     st.subheader('Personal Information')
 
-    # Initialize session state for personal information
+    # Initialize session state for personal information (if not already set by restart_with_same_inputs)
     if "name" not in st.session_state:
         st.session_state["name"] = ""
     if "experience" not in st.session_state:
@@ -199,39 +201,45 @@ if not st.session_state.setup_complete:
         st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200, key="skills_text_input")
     else: # input_method == "Speak"
         st.write("### Name")
-        current_name_transcription = handle_audio_input_setup("name", "mic_recorder_name")
+        # Pre-fill with existing name if available
+        initial_name_value = st.session_state["name"] if st.session_state["name"] else st.session_state.name_audio_transcription
         st.session_state["name"] = st.text_input(
             label="Name (from audio or manual edit)",
-            value=st.session_state["name"] if st.session_state["name"] else current_name_transcription,
+            value=initial_name_value,
             placeholder="Enter your name or speak it", max_chars=40,
             key="name_input_final"
         )
+        # Call recorder *after* displaying text input, but ensure state is updated if recording occurs
+        handle_audio_input_setup("name", "mic_recorder_name")
         st.markdown("---")
 
         st.write("### Experience")
-        current_experience_transcription = handle_audio_input_setup("experience", "mic_recorder_experience")
+        initial_experience_value = st.session_state["experience"] if st.session_state["experience"] else st.session_state.experience_audio_transcription
         st.session_state["experience"] = st.text_area(
             label="Experience (from audio or manual edit)",
-            value=st.session_state["experience"] if st.session_state["experience"] else current_experience_transcription,
+            value=initial_experience_value,
             placeholder="Describe your experience or speak it", max_chars=200,
             key="experience_input_final"
         )
+        handle_audio_input_setup("experience", "mic_recorder_experience")
         st.markdown("---")
 
         st.write("### Skills")
-        current_skills_transcription = handle_audio_input_setup("skills", "mic_recorder_skills")
+        initial_skills_value = st.session_state["skills"] if st.session_state["skills"] else st.session_state.skills_audio_transcription
         st.session_state["skills"] = st.text_area(
             label="Skills (from audio or manual edit)",
-            value=st.session_state["skills"] if st.session_state["skills"] else current_skills_transcription,
+            value=initial_skills_value,
             placeholder="List your skills or speak them", max_chars=200,
             key="skills_input_final"
         )
+        handle_audio_input_setup("skills", "mic_recorder_skills")
         st.markdown("---")
+
 
     # Company and Position Section
     st.subheader('Company and Position')
 
-    # Initialize session state for company and position information
+    # Initialize session state for company and position information (if not already set by restart_with_same_inputs)
     if "position" not in st.session_state:
         st.session_state["position"] = ""
     if "company" not in st.session_state:
@@ -268,7 +276,6 @@ if not st.session_state.setup_complete:
             st.session_state.setup_complete = False
         else:
             st.write("Setup complete. Starting interview...")
-            # No need for streamlit_js_eval reload here, just rerun
             st.rerun()
 
 
@@ -354,11 +361,14 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             auto_play_audio(st.session_state.current_ai_audio_path)
         st.write(f"**Interviewer:** {st.session_state.current_ai_response_text}")
 
+        # The first "Next Question" click should not increment user_message_count
+        # because the first question was from the AI directly.
         if st.button("Next Question", key="continue_interview_button"):
             st.session_state.awaiting_user_action = False
-            # Increment user_message_count only if this is not the very first AI intro.
-            # The initial intro doesn't count as a user's turn being answered.
-            if st.session_state.current_ai_audio_path != "assistant_initial_intro.mp3" or st.session_state.user_message_count > 0:
+            # Only increment user_message_count if we're past the initial AI intro AND it's a real user turn
+            # or if current_ai_audio_path is not the initial intro path.
+            # This logic needs careful handling to ensure user_message_count tracks actual user responses.
+            if st.session_state.current_ai_audio_path != "assistant_initial_intro.mp3":
                 st.session_state.user_message_count += 1
             st.rerun()
 
@@ -476,13 +486,15 @@ if st.session_state.feedback_shown:
 
     feedback_completion = feedback_client.chat.completions.create(
         model="gpt-4o",
-        messages = [
-            {"role": "system", "content": """You are an impartial evaluator of interview performance.  
-            Output only in the following format:  
-            Overall Score: [1-10]  
-            Feedback: [Concise, constructive feedback highlighting strengths, weaknesses, and improvement areas.]  
-            Do not ask questions or continue the conversation."""},
-            {"role": "user", "content": f"Evaluate the following interview strictly based on performance: {conversation_history}"}
+        messages=[
+            {"role": "system", "content": """You are a helpful tool that provides feedback on an interviewee performance.
+            Before the Feedback give a score of 1 to 10.
+            Follow this format:
+            Overall Score: //Your score
+            Feedback: //Here you put your feedback
+            Give only the feedback do not ask any additional questions.
+            """},
+            {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any conversation: {conversation_history}"}
         ]
     )
 
@@ -503,7 +515,5 @@ if st.session_state.feedback_shown:
         if st.button("Restart Interview (Full Reset)", type="primary", key="restart_interview_full"):
             restart_full()
     with col2:
-        if st.button("Restart with Same Inputs", type="secondary", key="restart_interview_same_inputs"):
+        if st.button("Restart with Same Inputs (Edit Details)", type="secondary", key="restart_interview_same_inputs"):
             restart_with_same_inputs()
-
-
