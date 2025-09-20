@@ -28,6 +28,9 @@ if "current_ai_response_text" not in st.session_state:
     st.session_state.current_ai_response_text = ""
 if "current_ai_audio_path" not in st.session_state:
     st.session_state.current_ai_audio_path = ""
+# Session state for feedback audio file path
+if "feedback_audio_path" not in st.session_state:
+    st.session_state.feedback_audio_path = ""
 
 
 # Session state variables for initial personal information audio transcriptions
@@ -49,7 +52,7 @@ def complete_setup():
 def show_feedback():
     st.session_state.feedback_shown = True
 
-# --- Convert text to audio (Provided by user) ---
+# --- Convert text to audio ---
 def text_to_audio(client, text, audio_path, voice_type="alloy"):
     try:
         response = client.audio.speech.create(model="tts-1", voice=voice_type, input=text)
@@ -57,7 +60,7 @@ def text_to_audio(client, text, audio_path, voice_type="alloy"):
     except Exception as e:
         st.error(f"Error converting text to audio: {e}")
 
-# --- Autoplay audio (Provided by user) ---
+# --- Autoplay audio ---
 def auto_play_audio(audio_file_path):
     if os.path.exists(audio_file_path):
         with open(audio_file_path, "rb") as audio_file:
@@ -119,7 +122,6 @@ if not st.session_state.setup_complete:
 
 
     # Option to input via text or voice
-    # CHANGE IS HERE: set index=1 to default to "Speak"
     input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=1, key="input_method_radio")
 
     if input_method == "Type":
@@ -161,8 +163,6 @@ if not st.session_state.setup_complete:
     st.subheader('Company and Position')
 
     # Initialize session state for company and position information
-    if "level" not in st.session_state:
-        st.session_state["level"] = ""
     if "position" not in st.session_state:
         st.session_state["position"] = ""
     if "company" not in st.session_state:
@@ -181,13 +181,6 @@ if not st.session_state.setup_complete:
         value=st.session_state["position"],
         placeholder="e.g., Senior Software Engineer",
         key="position_text_input"
-    )
-
-    st.session_state["level"] = st.text_input(
-        label="Level (e.g., Junior, Mid-level, Senior)",
-        value=st.session_state["level"],
-        placeholder="e.g., Senior",
-        key="level_text_input"
     )
 
     st.session_state["job_post"] = st.text_area(
@@ -232,7 +225,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         system_prompt_content = (
             f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
             f"with experience: {st.session_state['experience']} and skills: {st.session_state['skills']}. "
-            f"You should interview him for the position {st.session_state['level']} {st.session_state['position']} "
+            f"You should interview him for the position {st.session_state['position']} "
             f"at the company {st.session_state['company']}."
         )
         # Conditionally add the job post information to the prompt
@@ -257,13 +250,13 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # Case 1: Assistant has just responded, waiting for user to click "Continue"
     if st.session_state.awaiting_user_action:
-        st.info("Please listen to the interviewer's response and click 'Continue' when you're ready.")
+        st.info("Please listen to the interviewer's response and click 'Next Question' when you're ready.")
 
         if st.session_state.current_ai_audio_path and os.path.exists(st.session_state.current_ai_audio_path):
             auto_play_audio(st.session_state.current_ai_audio_path)
         st.write(f"**Interviewer:** {st.session_state.current_ai_response_text}")
 
-        if st.button("Continue Interview", key="continue_interview_button"):
+        if st.button("Next Question", key="continue_interview_button"):
             st.session_state.awaiting_user_action = False
             st.session_state.user_message_count += 1
             st.rerun()
@@ -352,6 +345,11 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             else:
                 st.warning("Please provide an answer before sending.")
 
+        if st.button("Finish Interview and Get Feedback", key="finish_interview_button"):
+            st.session_state.chat_complete = True
+            st.session_state.awaiting_user_action = False
+            st.rerun()
+
     # Case 3: Interview is complete
     else:
         st.session_state.chat_complete = True
@@ -387,9 +385,22 @@ if st.session_state.feedback_shown:
         ]
     )
 
-    st.write(feedback_completion.choices[0].message.content)
-
+    feedback_text = feedback_completion.choices[0].message.content
+    st.write(feedback_text)
+    
+    # Generate and autoplay audio of the feedback
+    feedback_audio_file = "feedback_summary.mp3"
+    try:
+        text_to_audio(feedback_client, feedback_text, feedback_audio_file, voice_type="alloy")
+        st.session_state.feedback_audio_path = feedback_audio_file
+        auto_play_audio(feedback_audio_file)
+    except Exception as e:
+        st.error(f"Error generating feedback audio: {e}. Displaying text only.")
+        
     if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
+        # Clean up all audio files on restart
+        if st.session_state.feedback_audio_path and os.path.exists(st.session_state.feedback_audio_path):
+            os.remove(st.session_state.feedback_audio_path)
         for message in st.session_state.messages:
             if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
                 os.remove(message["audio_file_path"])
