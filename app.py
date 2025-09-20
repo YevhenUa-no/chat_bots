@@ -122,7 +122,7 @@ if not st.session_state.setup_complete:
 
 
     # Option to input via text or voice
-    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=1, key="input_method_radio")
+    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=0, key="input_method_radio") #If you want to add Speak ad default option for Personal Data input - change to index 1 
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
@@ -405,3 +405,4 @@ if st.session_state.feedback_shown:
             if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
                 os.remove(message["audio_file_path"])
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
+
