@@ -6,7 +6,7 @@ import os
 import base64
 
 # Setting up the Streamlit page configuration
-st.set_page_config(page_title="Streamlit Interview Bot", page_icon="🤖")
+st.set_page_config(page_title="Interview Bot", page_icon="🤖")
 st.title("Interview Bot")
 
 # Initialize session state variables
@@ -505,4 +505,5 @@ if st.session_state.feedback_shown:
     with col2:
         if st.button("Restart with Same Inputs", type="secondary", key="restart_interview_same_inputs"):
             restart_with_same_inputs()
+
 
