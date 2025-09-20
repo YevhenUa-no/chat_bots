@@ -31,6 +31,9 @@ if "current_ai_audio_path" not in st.session_state:
 # Session state for feedback audio file path
 if "feedback_audio_path" not in st.session_state:
     st.session_state.feedback_audio_path = ""
+# New session state to store initial inputs for "Restart with Same Inputs"
+if "initial_inputs" not in st.session_state:
+    st.session_state.initial_inputs = {}
 
 
 # Session state variables for initial personal information audio transcriptions
@@ -46,11 +49,77 @@ if "current_chat_voice_input" not in st.session_state:
     st.session_state.current_chat_voice_input = ""
 
 # Helper functions to update session state
+def clear_audio_files():
+    """Removes all generated audio files."""
+    audio_files = [f for f in os.listdir() if f.endswith((".mp3", ".webm")) and (f.startswith("assistant_") or f.startswith("chat_audio_") or f.startswith("audio_") or f == "feedback_summary.mp3")]
+    for f in audio_files:
+        try:
+            os.remove(f)
+        except Exception as e:
+            st.warning(f"Could not remove audio file {f}: {e}")
+
 def complete_setup():
     st.session_state.setup_complete = True
+    # Store initial inputs when setup is complete
+    st.session_state.initial_inputs = {
+        "name": st.session_state["name"],
+        "experience": st.session_state["experience"],
+        "skills": st.session_state["skills"],
+        "company": st.session_state["company"],
+        "position": st.session_state["position"],
+        "job_post": st.session_state["job_post"],
+    }
 
 def show_feedback():
     st.session_state.feedback_shown = True
+
+def reset_interview_state_for_restart():
+    """Resets all interview-specific session state variables."""
+    st.session_state.setup_complete = False
+    st.session_state.user_message_count = 0
+    st.session_state.feedback_shown = False
+    st.session_state.chat_complete = False
+    st.session_state.messages = []
+    st.session_state.awaiting_user_action = False
+    st.session_state.current_ai_response_text = ""
+    st.session_state.current_ai_audio_path = ""
+    st.session_state.feedback_audio_path = ""
+    st.session_state.name_audio_transcription = ""
+    st.session_state.experience_audio_transcription = ""
+    st.session_state.skills_audio_transcription = ""
+    st.session_state.current_chat_voice_input = ""
+    clear_audio_files() # Clear audio files on any restart
+
+def restart_full():
+    """Restarts the entire application, clearing all inputs and interview state."""
+    reset_interview_state_for_restart()
+    st.session_state.initial_inputs = {} # Clear saved inputs as well
+    st.session_state["name"] = ""
+    st.session_state["experience"] = ""
+    st.session_state["skills"] = ""
+    st.session_state["company"] = ""
+    st.session_state["position"] = ""
+    st.session_state["job_post"] = ""
+    # Use streamlit_js_eval to force a full browser refresh
+    streamlit_js_eval(js_expressions="parent.window.location.reload()")
+
+
+def restart_with_same_inputs():
+    """Restarts the interview phase, keeping initial input data pre-filled."""
+    reset_interview_state_for_restart()
+    # Restore initial inputs
+    if st.session_state.initial_inputs:
+        st.session_state["name"] = st.session_state.initial_inputs["name"]
+        st.session_state["experience"] = st.session_state.initial_inputs["experience"]
+        st.session_state["skills"] = st.session_state.initial_inputs["skills"]
+        st.session_state["company"] = st.session_state.initial_inputs["company"]
+        st.session_state["position"] = st.session_state.initial_inputs["position"]
+        st.session_state["job_post"] = st.session_state.initial_inputs["job_post"]
+    # Set setup_complete to True to bypass setup phase immediately
+    st.session_state.setup_complete = True
+    # Rerun to apply changes and go to interview phase
+    st.rerun()
+
 
 # --- Convert text to audio ---
 def text_to_audio(client, text, audio_path, voice_type="alloy"):
@@ -122,7 +191,7 @@ if not st.session_state.setup_complete:
 
 
     # Option to input via text or voice
-    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=1, key="input_method_radio")
+    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=0, key="input_method_radio")
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
@@ -194,12 +263,13 @@ if not st.session_state.setup_complete:
 
     # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup, key="start_interview_button"):
-        if not (st.session_state["name"] or st.session_state["experience"] or st.session_state["skills"]):
+        if not (st.session_state["name"] and st.session_state["experience"] and st.session_state["skills"]):
             st.warning("Please provide your personal information before starting the interview.")
             st.session_state.setup_complete = False
         else:
             st.write("Setup complete. Starting interview...")
-            streamlit_js_eval(js_expressions="parent.window.location.reload()")
+            # No need for streamlit_js_eval reload here, just rerun
+            st.rerun()
 
 
 # --- Interview Phase ---
@@ -207,7 +277,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     st.info(
     """
-    **Interview Started!** Please introduce yourself.
+    **Interview Started!** The interviewer will introduce themselves and ask the first question.
     """,
     icon="🎤",
     )
@@ -237,6 +307,34 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             "content": system_prompt_content
         }]
 
+        # --- Generate the FIRST question/intro from the assistant automatically ---
+        with st.spinner("Interviewer is preparing the first question..."):
+            initial_ai_prompt_content = (
+                f"Hello {st.session_state['name']}. My name is AI HR Manager from {st.session_state['company']}."
+                f"Thank you for applying for the {st.session_state['position']} position. "
+                "To start, could you please tell me what you know about our company or why you are interested in this particular position?"
+            )
+            
+            # Add this initial question to messages
+            st.session_state.messages.append({"role": "assistant", "content": initial_ai_prompt_content})
+
+            # Generate audio for the first question
+            first_question_audio_path = "assistant_initial_intro.mp3"
+            try:
+                text_to_audio(client, initial_ai_prompt_content, first_question_audio_path, voice_type="alloy")
+                st.session_state.current_ai_response_text = initial_ai_prompt_content
+                st.session_state.current_ai_audio_path = first_question_audio_path
+                st.session_state.awaiting_user_action = True # Wait for user to click "Next Question"
+            except Exception as e:
+                st.error(f"Error generating initial interviewer audio: {e}. Falling back to text-only.")
+                st.session_state.current_ai_response_text = initial_ai_prompt_content
+                st.session_state.current_ai_audio_path = "" # No audio path if error
+                st.session_state.awaiting_user_action = True
+            
+            # Rerun to display the first question and play audio
+            st.rerun()
+
+
     # --- Display Past Messages (Text Only for History) ---
     st.subheader("Conversation History")
     for message in st.session_state.messages:
@@ -248,7 +346,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # --- Interview Turn Logic ---
 
-    # Case 1: Assistant has just responded, waiting for user to click "Continue"
+    # Case 1: Assistant has just responded, waiting for user to click "Next Question"
     if st.session_state.awaiting_user_action:
         st.info("Please listen to the interviewer's response and click 'Next Question' when you're ready.")
 
@@ -258,11 +356,14 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
         if st.button("Next Question", key="continue_interview_button"):
             st.session_state.awaiting_user_action = False
-            st.session_state.user_message_count += 1
+            # Increment user_message_count only if this is not the very first AI intro.
+            # The initial intro doesn't count as a user's turn being answered.
+            if st.session_state.current_ai_audio_path != "assistant_initial_intro.mp3" or st.session_state.user_message_count > 0:
+                st.session_state.user_message_count += 1
             st.rerun()
 
-    # Case 2: Ready for user input (either initial turn or after clicking "Continue")
-    elif st.session_state.user_message_count < 5:
+    # Case 2: Ready for user input (either initial turn or after clicking "Next Question")
+    elif st.session_state.user_message_count < 5: # Limit to 5 user turns
         st.subheader(f"Your Turn (Question {st.session_state.user_message_count + 1} of 5)")
         mic_recorder_chat_output = mic_recorder(
             start_prompt="🎙️ Speak your answer",
@@ -305,7 +406,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
                 st.session_state.current_chat_voice_input = ""
 
-                if st.session_state.user_message_count < 5:
+                if st.session_state.user_message_count < 4: # If there are more questions to ask (total 5 user turns)
                     with st.spinner("Interviewer is thinking..."):
                         stream = client.chat.completions.create(
                             model=st.session_state["openai_model"],
@@ -339,12 +440,14 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                             st.session_state.user_message_count += 1
                             st.rerun()
 
-                else:
+                else: # If it was the last question (5th user turn)
                     st.session_state.chat_complete = True
+                    st.session_state.awaiting_user_action = False # Ensure no awaiting action for completed chat
                     st.rerun()
             else:
                 st.warning("Please provide an answer before sending.")
 
+        # Option to finish interview at any point
         if st.button("Finish Interview and Get Feedback", key="finish_interview_button"):
             st.session_state.chat_complete = True
             st.session_state.awaiting_user_action = False
@@ -373,15 +476,13 @@ if st.session_state.feedback_shown:
 
     feedback_completion = feedback_client.chat.completions.create(
         model="gpt-4o",
-        messages=[
-            {"role": "system", "content": """You are a helpful tool that provides feedback on an interviewee performance.
-            Before the Feedback give a score of 1 to 10.
-            Follow this format:
-            Overall Score: //Your score
-            Feedback: //Here you put your feedback
-            Give only the feedback do not ask any additional questions.
-            """},
-            {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any conversation: {conversation_history}"}
+        messages = [
+            {"role": "system", "content": """You are an impartial evaluator of interview performance.  
+            Output only in the following format:  
+            Overall Score: [1-10]  
+            Feedback: [Concise, constructive feedback highlighting strengths, weaknesses, and improvement areas.]  
+            Do not ask questions or continue the conversation."""},
+            {"role": "user", "content": f"Evaluate the following interview strictly based on performance: {conversation_history}"}
         ]
     )
 
@@ -396,12 +497,11 @@ if st.session_state.feedback_shown:
         auto_play_audio(feedback_audio_file)
     except Exception as e:
         st.error(f"Error generating feedback audio: {e}. Displaying text only.")
-        
-    if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
-        # Clean up all audio files on restart
-        if st.session_state.feedback_audio_path and os.path.exists(st.session_state.feedback_audio_path):
-            os.remove(st.session_state.feedback_audio_path)
-        for message in st.session_state.messages:
-            if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
-                os.remove(message["audio_file_path"])
-        streamlit_js_eval(js_expressions="parent.window.location.reload()")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Restart Interview (Full Reset)", type="primary", key="restart_interview_full"):
+            restart_full()
+    with col2:
+        if st.button("Restart with Same Inputs", type="secondary", key="restart_interview_same_inputs"):
+            restart_with_same_inputs()
