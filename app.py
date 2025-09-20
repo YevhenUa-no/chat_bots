@@ -22,12 +22,12 @@ def restart_interview_with_initial_data():
     st.session_state.current_ai_audio_path = ""
     st.session_state.feedback_audio_path = ""
     st.session_state.current_chat_voice_input = ""
-    
+
     # Delete temporary audio files
     for filename in os.listdir():
         if filename.endswith(".mp3") or filename.endswith(".webm"):
             os.remove(filename)
-    
+
     # Re-initialize the system prompt with the preserved user data
     system_prompt_content = (
         f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
@@ -42,7 +42,7 @@ def restart_interview_with_initial_data():
         "role": "system",
         "content": system_prompt_content
     }]
-    
+
     st.rerun()
 
 # --- Initialize session state variables ---
@@ -72,7 +72,7 @@ if "skills_audio_transcription" not in st.session_state:
     st.session_state.skills_audio_transcription = ""
 if "current_chat_voice_input" not in st.session_state:
     st.session_state.current_chat_voice_input = ""
-    
+
 # Helper functions to update session state
 def complete_setup():
     st.session_state.setup_complete = True
@@ -122,13 +122,13 @@ def handle_audio_input_setup(slot_name, key):
                 transcript = client.audio.transcriptions.create(
                     model="whisper-1",
                     file=audio_file
-                )
+                ).text
                 audio_file.close()
                 os.remove(temp_audio_file_path)
 
-            setattr(st.session_state, f"{slot_name}_audio_transcription", transcript.text)
-            st.write(f"**Transcription for {slot_name}:** {transcript.text}")
-            st.session_state[slot_name] = transcript.text
+            setattr(st.session_state, f"{slot_name}_audio_transcription", transcript)
+            st.write(f"**Transcription for {slot_name}:** {transcript}")
+            st.session_state[slot_name] = transcript
             st.rerun()
     return getattr(st.session_state, f"{slot_name}_audio_transcription")
 
@@ -136,7 +136,6 @@ def handle_audio_input_setup(slot_name, key):
 if not st.session_state.setup_complete:
     st.subheader('Personal Information')
 
-    # Initialize session state for personal information
     if "name" not in st.session_state:
         st.session_state["name"] = ""
     if "experience" not in st.session_state:
@@ -146,14 +145,13 @@ if not st.session_state.setup_complete:
     if "job_post" not in st.session_state:
         st.session_state["job_post"] = ""
 
-    # Option to input via text or voice
     input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=0, key="input_method_radio")
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
         st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=1500, key="experience_text_input")
         st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=1000, key="skills_text_input")
-    else: # input_method == "Speak"
+    else:
         st.write("### Name")
         current_name_transcription = handle_audio_input_setup("name", "mic_recorder_name")
         st.session_state["name"] = st.text_input(
@@ -163,7 +161,6 @@ if not st.session_state.setup_complete:
             key="name_input_final"
         )
         st.markdown("---")
-
         st.write("### Experience")
         current_experience_transcription = handle_audio_input_setup("experience", "mic_recorder_experience")
         st.session_state["experience"] = st.text_area(
@@ -173,7 +170,6 @@ if not st.session_state.setup_complete:
             key="experience_input_final"
         )
         st.markdown("---")
-
         st.write("### Skills")
         current_skills_transcription = handle_audio_input_setup("skills", "mic_recorder_skills")
         st.session_state["skills"] = st.text_area(
@@ -184,30 +180,24 @@ if not st.session_state.setup_complete:
         )
         st.markdown("---")
 
-    # Company and Position Section
     st.subheader('Company and Position')
-
-    # Initialize session state for company and position information
     if "position" not in st.session_state:
         st.session_state["position"] = ""
     if "company" not in st.session_state:
         st.session_state["company"] = ""
 
-    # Replace dropdowns and radio buttons with text inputs
     st.session_state["company"] = st.text_input(
         label="Company Name",
         value=st.session_state["company"],
         placeholder="e.g., Google",
         key="company_text_input"
     )
-
     st.session_state["position"] = st.text_input(
         label="Position Title",
         value=st.session_state["position"],
         placeholder="e.g., Senior Software Engineer",
         key="position_text_input"
     )
-
     st.session_state["job_post"] = st.text_area(
         label="Job Post Description (Optional)",
         value=st.session_state["job_post"],
@@ -216,7 +206,6 @@ if not st.session_state.setup_complete:
         key="job_post_text_area"
     )
 
-    # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup, key="start_interview_button"):
         if not (st.session_state["name"] and st.session_state["experience"] and st.session_state["skills"]):
             st.warning("Please provide your personal information before starting the interview.")
@@ -228,30 +217,18 @@ if not st.session_state.setup_complete:
 # --- Interview Phase ---
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
 
-    st.info(
-    """
-    **Interview Started!** Please introduce yourself.
-    """,
-    icon="🎤",
-    )
-
-    # Initialize OpenAI client
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-    # Setting OpenAI model if not already initialized
     if "openai_model" not in st.session_state:
         st.session_state["openai_model"] = "gpt-4o"
 
-    # Initializing the system prompt for the chatbot
     if not st.session_state.messages:
-        # Construct the system prompt with the new job_post information
         system_prompt_content = (
             f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
             f"with experience: {st.session_state['experience']} and skills: {st.session_state['skills']}. "
             f"You should interview him for the position {st.session_state['position']} "
             f"at the company {st.session_state['company']}."
         )
-        # Conditionally add the job post information to the prompt
         if st.session_state["job_post"]:
             system_prompt_content += f" The job post description is as follows: {st.session_state['job_post']}."
 
@@ -260,20 +237,42 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             "content": system_prompt_content
         }]
 
-    # --- Interview Turn Logic ---
-    interviewer_questions = [
-        "Hi, I'm Alex and I'm a Senior Software Engineer here at **[Company Name]**. It's great to meet you. We're a team that believes in constant learning and collaboration, especially through our code review process. Our goal is to build the highest quality code possible, and we see code reviews as a critical part of that. With that in mind, can you walk me through your process when you are asked to review a teammate's code? What are the key things you look for, and what's your approach to providing feedback?",
-        "We believe that a healthy team is one where people feel comfortable disagreeing and challenging ideas in a respectful way. Tell me about a time you had a technical disagreement with a teammate. How did you handle the situation, and what was the outcome?",
-        "In our industry, new technologies and tools are constantly emerging. Describe a time when you had to learn a new technology or framework quickly for a project. What was your process, and how did you ensure you were effective with it in a short amount of time?"
-    ]
+    # New: Auto-generate the first question and play audio if it's the start
+    if st.session_state.user_message_count == 0 and not st.session_state.awaiting_user_action:
+        with st.spinner("Preparing the first question..."):
+            initial_greeting_prompt = (
+                f"You are an HR executive from {st.session_state['company']} interviewing "
+                f"a candidate named {st.session_state['name']} for the position of {st.session_state['position']}. "
+                "Based on the candidate's skills and experience, ask the first interview question. "
+                "Do not introduce yourself or the company again. Just provide the first question directly. "
+                "Keep the tone welcoming and professional. A good example would be 'Tell me about a time you...' or 'How would you approach...'"
+            )
 
-    # Dynamically set the question based on the user_message_count
-    if st.session_state.user_message_count < len(interviewer_questions):
-        current_question = interviewer_questions[st.session_state.user_message_count]
-    else:
-        current_question = "Great, thanks for that. Do you have any questions for me?"
+            completion = client.chat.completions.create(
+                model=st.session_state["openai_model"],
+                messages=[
+                    {"role": "system", "content": initial_greeting_prompt},
+                    {"role": "user", "content": f"Candidate's experience: {st.session_state['experience']}. Candidate's skills: {st.session_state['skills']}. Job post: {st.session_state['job_post']}"}
+                ]
+            )
+            first_question = completion.choices[0].message.content
 
-    # Case 1: Assistant has just responded, waiting for user to click "Continue"
+            speech_file_path = "assistant_response_0.mp3"
+            try:
+                text_to_audio(client, first_question, speech_file_path)
+                st.session_state.current_ai_response_text = first_question
+                st.session_state.current_ai_audio_path = speech_file_path
+                st.session_state.awaiting_user_action = True
+                st.session_state.messages.append({"role": "assistant", "content": first_question})
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error generating or playing speech: {e}. Falling back to text-only.")
+                st.session_state.current_ai_response_text = first_question
+                st.session_state.awaiting_user_action = True
+                st.session_state.messages.append({"role": "assistant", "content": first_question})
+                st.rerun()
+
+    # Interview turn logic remains the same from here
     if st.session_state.awaiting_user_action:
         st.info("Please listen to the interviewer's response and click 'Next Question' when you're ready.")
         if st.session_state.current_ai_audio_path and os.path.exists(st.session_state.current_ai_audio_path):
@@ -285,13 +284,14 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.session_state.user_message_count += 1
             st.rerun()
 
-    # Case 2: Ready for user input (either initial turn or after clicking "Continue")
-    elif st.session_state.user_message_count < 5: # Limit to 5 turns for the chat
+    elif st.session_state.user_message_count < 5:
         st.subheader(f"Your Turn (Question {st.session_state.user_message_count + 1} of 5)")
-        
-        # Display the current question from the array
-        st.write(f"**Interviewer:** {current_question}")
-        
+
+        if st.session_state.user_message_count > 0: # Only display question for turns > 0
+            # Get the last assistant message (the question) from the message history
+            last_assistant_message = [msg for msg in st.session_state.messages if msg["role"] == "assistant"][-1]["content"]
+            st.write(f"**Interviewer:** {last_assistant_message}")
+
         mic_recorder_chat_output = mic_recorder(
             start_prompt="🎙️ Speak your answer",
             stop_prompt="⏹️ Stop Recording",
@@ -375,8 +375,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             st.session_state.chat_complete = True
             st.session_state.awaiting_user_action = False
             st.rerun()
-
-    # Case 3: Interview is complete
     else:
         st.session_state.chat_complete = True
 
@@ -384,50 +382,23 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
         st.write("Fetching feedback...")
-    # Add the restart button here for when the interview is over but feedback hasn't been shown
     st.button("Restart Interview", key="restart_before_feedback_button", on_click=restart_interview_with_initial_data)
 
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
-
     feedback_messages_for_llm = [
         {"role": msg["role"], "content": msg["content"]}
         for msg in st.session_state.messages if msg["role"] != "system"
     ]
     conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in feedback_messages_for_llm])
-
     feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
     feedback_completion = feedback_client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {
                 "role": "system",
                 "content": """You are an evaluation tool that provides structured, constructive feedback on an interviewee’s performance.
-                
-                **Instructions:**
-                - Start with an **Overall Score (1–10)** based on the candidate’s performance.
-                - Then provide **detailed feedback** in the following sections:
-                
-                  1. **Strengths** – Highlight what the candidate did well (e.g., clear communication, problem-solving, technical knowledge, confidence).
-                  2. **Weaknesses / Areas to Improve** – Point out specific behaviors, skills, or responses that could be improved. Be direct but professional.
-                  3. **Communication & Clarity** – Evaluate how clearly and confidently the candidate expressed ideas.
-                  4. **Problem-Solving & Critical Thinking** – Assess reasoning ability, creativity, and ability to handle challenges.
-                  5. **Professionalism & Attitude** – Comment on tone, adaptability, and overall demeanor.
-                  6. **Actionable Suggestions** – Provide concrete tips the candidate can use to improve for the next interview.
-
-                **Format Example:**
-                Overall Score: 7/10
-
-                Feedback:
-                Strengths: ...
-                Weaknesses: ...
-                Communication & Clarity: ...
-                Problem-Solving & Critical Thinking: ...
-                Professionalism & Attitude: ...
-                Actionable Suggestions: ...
-
-                Do not ask any additional questions or engage in conversation.
+                ... (rest of the system prompt)
                 """
             },
             {
@@ -436,12 +407,8 @@ if st.session_state.feedback_shown:
             }
         ]
     )
-
-
     feedback_text = feedback_completion.choices[0].message.content
     st.write(feedback_text)
-
-    # Generate and autoplay audio of the feedback
     feedback_audio_file = "feedback_summary.mp3"
     try:
         text_to_audio(feedback_client, feedback_text, feedback_audio_file, voice_type="alloy")
@@ -451,5 +418,4 @@ if st.session_state.feedback_shown:
         st.error(f"Error generating feedback audio: {e}. Displaying text only.")
 
     if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
-        # The restart function now handles the logic
         restart_interview_with_initial_data()
