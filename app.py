@@ -9,7 +9,43 @@ import base64
 st.set_page_config(page_title="Streamlit Interview Bot", page_icon="💬")
 st.title("Interview Bot")
 
-# Initialize session state variables
+# --- Function to restart the interview ---
+def restart_interview_with_initial_data():
+    """Resets chat-related session state while preserving initial user input."""
+    # Resetting session state variables for the chat and feedback
+    st.session_state.user_message_count = 0
+    st.session_state.feedback_shown = False
+    st.session_state.chat_complete = False
+    st.session_state.messages = []
+    st.session_state.awaiting_user_action = False
+    st.session_state.current_ai_response_text = ""
+    st.session_state.current_ai_audio_path = ""
+    st.session_state.feedback_audio_path = ""
+    st.session_state.current_chat_voice_input = ""
+    
+    # Delete temporary audio files
+    for filename in os.listdir():
+        if filename.endswith(".mp3") or filename.endswith(".webm"):
+            os.remove(filename)
+    
+    # Re-initialize the system prompt with the preserved user data
+    system_prompt_content = (
+        f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
+        f"with experience: {st.session_state['experience']} and skills: {st.session_state['skills']}. "
+        f"You should interview him for the position {st.session_state['position']} "
+        f"at the company {st.session_state['company']}."
+    )
+    if st.session_state["job_post"]:
+        system_prompt_content += f" The job post description is as follows: {st.session_state['job_post']}."
+
+    st.session_state.messages = [{
+        "role": "system",
+        "content": system_prompt_content
+    }]
+    
+    st.rerun()
+
+# --- Initialize session state variables ---
 if "setup_complete" not in st.session_state:
     st.session_state.setup_complete = False
 if "user_message_count" not in st.session_state:
@@ -20,31 +56,23 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
-# New session state for controlling the flow after assistant response
 if "awaiting_user_action" not in st.session_state:
     st.session_state.awaiting_user_action = False
-# Session state to hold the AI's last spoken text and audio path
 if "current_ai_response_text" not in st.session_state:
     st.session_state.current_ai_response_text = ""
 if "current_ai_audio_path" not in st.session_state:
     st.session_state.current_ai_audio_path = ""
-# Session state for feedback audio file path
 if "feedback_audio_path" not in st.session_state:
     st.session_state.feedback_audio_path = ""
-
-
-# Session state variables for initial personal information audio transcriptions
 if "name_audio_transcription" not in st.session_state:
     st.session_state.name_audio_transcription = ""
 if "experience_audio_transcription" not in st.session_state:
     st.session_state.experience_audio_transcription = ""
 if "skills_audio_transcription" not in st.session_state:
     st.session_state.skills_audio_transcription = ""
-
-# New session state for temporary voice input during the chat interview
 if "current_chat_voice_input" not in st.session_state:
     st.session_state.current_chat_voice_input = ""
-
+    
 # Helper functions to update session state
 def complete_setup():
     st.session_state.setup_complete = True
@@ -70,7 +98,6 @@ def auto_play_audio(audio_file_path):
         st.markdown(audio_html, unsafe_allow_html=True)
     else:
         st.error(f"Error: Audio file not found at {audio_file_path}")
-
 
 # Function to handle audio recording and transcription for initial setup
 def handle_audio_input_setup(slot_name, key):
@@ -105,7 +132,6 @@ def handle_audio_input_setup(slot_name, key):
             st.rerun()
     return getattr(st.session_state, f"{slot_name}_audio_transcription")
 
-
 # --- Setup Stage ---
 if not st.session_state.setup_complete:
     st.subheader('Personal Information')
@@ -119,7 +145,6 @@ if not st.session_state.setup_complete:
         st.session_state["skills"] = ""
     if "job_post" not in st.session_state:
         st.session_state["job_post"] = ""
-
 
     # Option to input via text or voice
     input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=0, key="input_method_radio")
@@ -191,7 +216,6 @@ if not st.session_state.setup_complete:
         key="job_post_text_area"
     )
 
-
     # Button to complete setup
     if st.button("Start Interview", on_click=complete_setup, key="start_interview_button"):
         if not (st.session_state["name"] and st.session_state["experience"] and st.session_state["skills"]):
@@ -200,7 +224,6 @@ if not st.session_state.setup_complete:
         else:
             st.write("Setup complete. Starting interview...")
             streamlit_js_eval(js_expressions="parent.window.location.reload()")
-
 
 # --- Interview Phase ---
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
@@ -238,7 +261,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
         }]
 
     # --- Interview Turn Logic ---
-    # The new prompt structure starts here
     interviewer_questions = [
         "Hi, I'm Alex and I'm a Senior Software Engineer here at **[Company Name]**. It's great to meet you. We're a team that believes in constant learning and collaboration, especially through our code review process. Our goal is to build the highest quality code possible, and we see code reviews as a critical part of that. With that in mind, can you walk me through your process when you are asked to review a teammate's code? What are the key things you look for, and what's your approach to providing feedback?",
         "We believe that a healthy team is one where people feel comfortable disagreeing and challenging ideas in a respectful way. Tell me about a time you had a technical disagreement with a teammate. How did you handle the situation, and what was the outcome?",
@@ -246,11 +268,9 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     ]
 
     # Dynamically set the question based on the user_message_count
-    # The first 3 questions are hardcoded, subsequent questions can be dynamic if needed
     if st.session_state.user_message_count < len(interviewer_questions):
         current_question = interviewer_questions[st.session_state.user_message_count]
     else:
-        # If more questions are needed, you can add a generic prompt here
         current_question = "Great, thanks for that. Do you have any questions for me?"
 
     # Case 1: Assistant has just responded, waiting for user to click "Continue"
@@ -360,11 +380,12 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     else:
         st.session_state.chat_complete = True
 
-
 # --- Feedback and Restart ---
 if st.session_state.chat_complete and not st.session_state.feedback_shown:
     if st.button("Get Feedback", on_click=show_feedback, key="get_feedback_button"):
         st.write("Fetching feedback...")
+    # Add the restart button here for when the interview is over but feedback hasn't been shown
+    st.button("Restart Interview", key="restart_before_feedback_button", on_click=restart_interview_with_initial_data)
 
 if st.session_state.feedback_shown:
     st.subheader("Feedback")
@@ -430,10 +451,5 @@ if st.session_state.feedback_shown:
         st.error(f"Error generating feedback audio: {e}. Displaying text only.")
 
     if st.button("Restart Interview", type="primary", key="restart_interview_button_final"):
-        # Clean up all audio files on restart
-        if st.session_state.feedback_audio_path and os.path.exists(st.session_state.feedback_audio_path):
-            os.remove(st.session_state.feedback_audio_path)
-        for message in st.session_state.messages:
-            if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
-                os.remove(message["audio_file_path"])
-        streamlit_js_eval(js_expressions="parent.window.location.reload()")
+        # The restart function now handles the logic
+        restart_interview_with_initial_data()
