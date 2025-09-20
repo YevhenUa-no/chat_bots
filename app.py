@@ -119,7 +119,8 @@ if not st.session_state.setup_complete:
 
 
     # Option to input via text or voice
-    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), key="input_method_radio")
+    # CHANGE IS HERE: set index=1 to default to "Speak"
+    input_method = st.radio("How would you like to provide your information?", ("Type", "Speak"), index=1, key="input_method_radio")
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
