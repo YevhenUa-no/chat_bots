@@ -126,8 +126,8 @@ if not st.session_state.setup_complete:
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
-        st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200, key="experience_text_input")
-        st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200, key="skills_text_input")
+        st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=1500, key="experience_text_input")
+        st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=1000, key="skills_text_input")
     else: # input_method == "Speak"
         st.write("### Name")
         current_name_transcription = handle_audio_input_setup("name", "mic_recorder_name")
@@ -375,21 +375,47 @@ if st.session_state.feedback_shown:
     ]
     conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in feedback_messages_for_llm])
 
-    feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-    feedback_completion = feedback_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": """You are a helpful tool that provides feedback on an interviewee performance.
-            Before the Feedback give a score of 1 to 10.
-            Follow this format:
-            Overall Score: //Your score
-            Feedback: //Here you put your feedback
-            Give only the feedback do not ask any additional questions.
-            """},
-            {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any conversation: {conversation_history}"}
-        ]
-    )
+feedback_completion = feedback_client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {
+            "role": "system", 
+            "content": """You are an evaluation tool that provides structured, constructive feedback on an interviewee’s performance. 
+            
+            **Instructions:**
+            - Start with an **Overall Score (1–10)** based on the candidate’s performance. 
+            - Then provide **detailed feedback** in the following sections:
+              
+              1. **Strengths** – Highlight what the candidate did well (e.g., clear communication, problem-solving, technical knowledge, confidence).
+              2. **Weaknesses / Areas to Improve** – Point out specific behaviors, skills, or responses that could be improved. Be direct but professional.  
+              3. **Communication & Clarity** – Evaluate how clearly and confidently the candidate expressed ideas.  
+              4. **Problem-Solving & Critical Thinking** – Assess reasoning ability, creativity, and ability to handle challenges.  
+              5. **Professionalism & Attitude** – Comment on tone, adaptability, and overall demeanor.  
+              6. **Actionable Suggestions** – Provide concrete tips the candidate can use to improve for the next interview.  
+
+            **Format Example:**
+            Overall Score: 7/10
+
+            Feedback:
+            Strengths: ...
+            Weaknesses: ...
+            Communication & Clarity: ...
+            Problem-Solving & Critical Thinking: ...
+            Professionalism & Attitude: ...
+            Actionable Suggestions: ...
+
+            Do not ask any additional questions or engage in conversation.
+            """
+        },
+        {
+            "role": "user", 
+            "content": f"Here is the interview transcript to evaluate: {conversation_history}"
+        }
+    ]
+)
+
 
     feedback_text = feedback_completion.choices[0].message.content
     st.write(feedback_text)
@@ -411,4 +437,5 @@ if st.session_state.feedback_shown:
             if message.get("audio_file_path") and os.path.exists(message["audio_file_path"]):
                 os.remove(message["audio_file_path"])
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
+
 
