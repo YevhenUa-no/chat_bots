@@ -17,8 +17,11 @@ Easy to Use: A simple, interactive interface to guide you through the process.
 
 
 START
+
  │
+
  ▼
+
 ──────────────────────────────
  SETUP STAGE
 ──────────────────────────────
@@ -34,10 +37,13 @@ START
   • Once all info given → "Start Interview"
 
  │
+
  ▼
+
 ──────────────────────────────
  INTERVIEW STAGE
 ──────────────────────────────
+
   • AI Interviewer introduces itself
   • 5 Question/Answer rounds:
        - AI asks a question (text + audio)
@@ -45,8 +51,10 @@ START
        - AI responds with follow-up question
   • User can finish early with "Finish Interview"
 
+
  │
  ▼
+
 ──────────────────────────────
  FEEDBACK STAGE
 ──────────────────────────────
