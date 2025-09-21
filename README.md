@@ -89,12 +89,12 @@ flowchart LR
     E --> F[Start Interview]
 
     F --> G[Interview Stage]
-    G --> H[AI introduces itself]
+    G --> H[AI introduces]
     H --> I[Up to 5 Q and A rounds]
     I --> J[Finish Interview option]
 
     J --> K[Feedback Stage]
-    K --> L[Score 1-10 and Feedback summary]
+    K --> L[Score and Feedback]
     L --> M[Feedback as Text or Audio]
     M --> N{Next Action}
     N --> O[Restart from scratch]
@@ -102,6 +102,8 @@ flowchart LR
     O --> B
     P --> B
     N --> Q([END])
+ 
+
 
 
 
