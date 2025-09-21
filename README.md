@@ -117,7 +117,3 @@ flowchart LR
     P --> B
     N --> Q([END])
 
-
-
-
-Credit for animation: https://brunopixels.tumblr.com/
