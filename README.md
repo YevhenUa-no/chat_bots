@@ -15,62 +15,91 @@ Instant Feedback: Receive a score and detailed feedback on your performance afte
 
 Easy to Use: A simple, interactive interface to guide you through the process.
 
+# 🤖 Interview Bot – Flow Overview
 
-START
+## 📊 Text Flow
+
+
+---
+
+## 🟦 SETUP STAGE
+- User provides personal info:
+  - **Name**
+  - **Experience**
+  - **Skills**
+  - **Company + Position**
+  - *(Optional)* Job post description
+- Info can be entered by:
+  - Typing ✍️
+  - Speaking 🎙️ (voice recorded + transcribed)
+- Once all info is given → **Start Interview**
+
+
 
  │
 
  ▼
 
-──────────────────────────────
- SETUP STAGE
-──────────────────────────────
-  • User provides personal info:
-      - Name
-      - Experience
-      - Skills
-      - Company + Position
-      - Job post description (optional)
-  • Info can be entered by:
-      - Typing OR
-      - Speaking (voice recorded + transcribed)
-  • Once all info given → "Start Interview"
+---
 
- │
+## 🟩 INTERVIEW STAGE
+- AI Interviewer introduces itself
+- **5 Question/Answer rounds**:
+  - AI asks a question (text + audio 🔊)
+  - User answers (text or voice 🎤)
+  - AI responds with a follow-up
+- User can also finish early → **Finish Interview**
 
- ▼
-
-──────────────────────────────
- INTERVIEW STAGE
-──────────────────────────────
-
-  • AI Interviewer introduces itself
-  • 5 Question/Answer rounds:
-       - AI asks a question (text + audio)
-       - User answers (text or voice)
-       - AI responds with follow-up question
-  • User can finish early with "Finish Interview"
 
 
  │
  ▼
 
-──────────────────────────────
- FEEDBACK STAGE
-──────────────────────────────
-  • AI evaluates performance
-      - Gives **Score (1–10)**
-      - Provides **Feedback summary**
-  • Feedback available as:
-      - Text
-      - Audio (autoplay)
-  • User options after feedback:
-      - 🔄 Restart interview from scratch
-      - ✏️ Restart with same inputs (edit details)
+
+---
+
+## 🟨 FEEDBACK STAGE
+- AI evaluates performance:
+  - Gives **Score (1–10)**
+  - Provides **Feedback summary**
+- Feedback is available as:
+  - Text 📄
+  - Audio (autoplay 🔊)
+- User options after feedback:
+  - 🔄 Restart interview from scratch
+  - ✏️ Restart with same inputs (edit details)
+
 
  │
  ▼
  END
+
+---
+
+## 🎨 Mermaid Flowchart
+
+
+```mermaid
+flowchart TD
+    A([START]) --> B[🟦 Setup Stage]
+    B -->|Provide info: Name, Experience, Skills, Company, Position, Job Post (optional)| C{Input Method}
+    C -->|Typing ✍️| D[Text fields]
+    C -->|Speaking 🎙️| E[Voice recording + transcription]
+    D --> F[✅ Start Interview]
+    E --> F[✅ Start Interview]
+
+    F --> G[🟩 Interview Stage]
+    G --> H[AI introduces itself]
+    H --> I[Up to 5 Q&A rounds]
+    I --> J[User can finish early → Finish Interview]
+    J --> K[🟨 Feedback Stage]
+
+    K --> L[Score (1–10) + Feedback summary]
+    L --> M[Feedback available as Text 📄 + Audio 🔊]
+    M --> N{Next Action}
+    N -->|🔄 Restart from scratch| B
+    N -->|✏️ Restart with same inputs| B
+    N --> O([END ✅])
 
 
 
