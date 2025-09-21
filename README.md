@@ -79,7 +79,6 @@ Easy to Use: A simple, interactive interface to guide you through the process.
 
 ## 🎨 Mermaid Flowchart (Horizontal)
 
-```mermaid
 flowchart LR
     A([START]) --> B[Setup Stage]
     B --> C{Input Method}
@@ -90,7 +89,7 @@ flowchart LR
 
     F --> G[Interview Stage]
     G --> H[AI introduces]
-    H --> I[Up to 5 Q and A rounds]
+    H --> I[Up to 5 Q & A rounds]
     I --> J[Finish Interview option]
 
     J --> K[Feedback Stage]
