@@ -6,12 +6,11 @@
 
 Streamlit page - https://chatbots-interview.streamlit.app/
 
-Key Features
-Voice-Powered Interface: Speak your answers and listen to the interviewer's questions, just like a real conversation.
+## Features
 
-Realistic AI Interviewer: Our bot acts as an HR executive, asking questions tailored to your specified role, company, and experience level.
-
-Instant Feedback: Receive a score and detailed feedback on your performance after the interview is complete.
+-   Voice and text input
+-   AI-powered questions
+-   Interview performance feedback
 
 Easy to Use: A simple, interactive interface to guide you through the process.
 
@@ -63,31 +62,8 @@ Easy to Use: A simple, interactive interface to guide you through the process.
   - 🔄 Restart interview from scratch
   - ✏️ Restart with same inputs (edit details)
 
+## END
 
-
----
-
-## 🎨 Mermaid Flowchart
-
-
-
----
-
-## 🎨 Mermaid Flowchart (Horizontal)
-
-# 🤖 Interview Bot – Flow Overview
-
-## 🎨 Mermaid Flowchart (Horizontal)
-
-# My Interview Bot
-
-A Streamlit application to practice for job interviews.
-
-## Features
-
--   Voice and text input
--   AI-powered questions
--   Interview performance feedback
 
 ## User Flow
 
