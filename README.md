@@ -62,34 +62,8 @@ Easy to Use: A simple, interactive interface to guide you through the process.
   - 🔄 Restart interview from scratch
   - ✏️ Restart with same inputs (edit details)
 
-## END
+ 
+```
 
 
-## User Flow
-
-This diagram illustrates the user journey through the application.
-
-```mermaid
-flowchart LR
-    A([START]) --> B[Setup Stage]
-    B --> C{Input Method}
-    C --> D[Typing]
-    C --> E[Speaking and Transcription]
-    D --> F[Start Interview]
-    E --> F[Start Interview]
-
-    F --> G[Interview Stage]
-    G --> H[AI introduces]
-    H --> I[Up to 5 Q & A rounds]
-    I --> J[Finish Interview option]
-
-    J --> K[Feedback Stage]
-    K --> L[Score and Feedback]
-    L --> M[Feedback as Text or Audio]
-    M --> N{Next Action}
-    N --> O[Restart from scratch]
-    O --> B
-    P[Restart with same inputs]
-    P --> B
-    N --> Q([END])
-
+Hrllo
