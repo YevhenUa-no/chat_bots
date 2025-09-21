@@ -197,8 +197,8 @@ if not st.session_state.setup_complete:
 
     if input_method == "Type":
         st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40, key="name_text_input")
-        st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200, key="experience_text_input")
-        st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200, key="skills_text_input")
+        st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=1500, key="experience_text_input")
+        st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=2000, key="skills_text_input")
     else: # input_method == "Speak"
         st.write("### Name")
         # Pre-fill with existing name if available
@@ -517,5 +517,6 @@ if st.session_state.feedback_shown:
     with col2:
         if st.button("Restart with Same Inputs (Edit Details)", type="secondary", key="restart_interview_same_inputs"):
             restart_with_same_inputs()
+
 
 
