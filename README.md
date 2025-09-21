@@ -75,23 +75,27 @@ Easy to Use: A simple, interactive interface to guide you through the process.
 
 ## 🎨 Mermaid Flowchart (Horizontal)
 
+# 🤖 Interview Bot – Flow Overview
+
+## 🎨 Mermaid Flowchart (Horizontal)
+
 ```mermaid
 flowchart LR
     A([START]) --> B[Setup Stage]
     B --> C{Input Method}
     C --> D[Typing]
-    C --> E[Speaking + Transcription]
+    C --> E[Speaking and Transcription]
     D --> F[Start Interview]
     E --> F[Start Interview]
 
     F --> G[Interview Stage]
     G --> H[AI introduces itself]
-    H --> I[Up to 5 Q&A rounds]
+    H --> I[Up to 5 Q and A rounds]
     I --> J[Finish Interview option]
 
     J --> K[Feedback Stage]
-    K --> L[Score (1–10) + Feedback summary]
-    L --> M[Feedback: Text + Audio]
+    K --> L[Score 1-10 and Feedback summary]
+    L --> M[Feedback as Text or Audio]
     M --> N{Next Action}
     N --> O[Restart from scratch]
     N --> P[Restart with same inputs]
