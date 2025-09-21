@@ -47,8 +47,6 @@ flowchart LR
 
 # 🤖 Interview Bot – Flow Overview
 
-## 📊 Text Flow
-
 
 ---
 
