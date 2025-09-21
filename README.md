@@ -16,5 +16,54 @@ Instant Feedback: Receive a score and detailed feedback on your performance afte
 Easy to Use: A simple, interactive interface to guide you through the process.
 
 
+START
+ │
+ ▼
+──────────────────────────────
+ SETUP STAGE
+──────────────────────────────
+  • User provides personal info:
+      - Name
+      - Experience
+      - Skills
+      - Company + Position
+      - Job post description (optional)
+  • Info can be entered by:
+      - Typing OR
+      - Speaking (voice recorded + transcribed)
+  • Once all info given → "Start Interview"
+
+ │
+ ▼
+──────────────────────────────
+ INTERVIEW STAGE
+──────────────────────────────
+  • AI Interviewer introduces itself
+  • 5 Question/Answer rounds:
+       - AI asks a question (text + audio)
+       - User answers (text or voice)
+       - AI responds with follow-up question
+  • User can finish early with "Finish Interview"
+
+ │
+ ▼
+──────────────────────────────
+ FEEDBACK STAGE
+──────────────────────────────
+  • AI evaluates performance
+      - Gives **Score (1–10)**
+      - Provides **Feedback summary**
+  • Feedback available as:
+      - Text
+      - Audio (autoplay)
+  • User options after feedback:
+      - 🔄 Restart interview from scratch
+      - ✏️ Restart with same inputs (edit details)
+
+ │
+ ▼
+ END
+
+
 
 Credit for animation: https://brunopixels.tumblr.com/
