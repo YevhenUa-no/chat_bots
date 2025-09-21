@@ -36,9 +36,6 @@ Easy to Use: A simple, interactive interface to guide you through the process.
 
 
 
- │
-
- ▼
 
 ---
 
@@ -51,9 +48,6 @@ Easy to Use: A simple, interactive interface to guide you through the process.
 - User can also finish early → **Finish Interview**
 
 
-
- │
- ▼
 
 
 ---
@@ -70,36 +64,40 @@ Easy to Use: A simple, interactive interface to guide you through the process.
   - ✏️ Restart with same inputs (edit details)
 
 
- │
- ▼
- END
 
 ---
 
 ## 🎨 Mermaid Flowchart
 
 
-```mermaid
-flowchart TD
-    A([START]) --> B[🟦 Setup Stage]
-    B -->|Provide info: Name, Experience, Skills, Company, Position, Job Post (optional)| C{Input Method}
-    C -->|Typing ✍️| D[Text fields]
-    C -->|Speaking 🎙️| E[Voice recording + transcription]
-    D --> F[✅ Start Interview]
-    E --> F[✅ Start Interview]
 
-    F --> G[🟩 Interview Stage]
+---
+
+## 🎨 Mermaid Flowchart (Horizontal)
+
+```mermaid
+flowchart LR
+    A([START]) --> B[Setup Stage]
+    B --> C{Input Method}
+    C --> D[Typing]
+    C --> E[Speaking + Transcription]
+    D --> F[Start Interview]
+    E --> F[Start Interview]
+
+    F --> G[Interview Stage]
     G --> H[AI introduces itself]
     H --> I[Up to 5 Q&A rounds]
-    I --> J[User can finish early → Finish Interview]
-    J --> K[🟨 Feedback Stage]
+    I --> J[Finish Interview option]
 
+    J --> K[Feedback Stage]
     K --> L[Score (1–10) + Feedback summary]
-    L --> M[Feedback available as Text 📄 + Audio 🔊]
+    L --> M[Feedback: Text + Audio]
     M --> N{Next Action}
-    N -->|🔄 Restart from scratch| B
-    N -->|✏️ Restart with same inputs| B
-    N --> O([END ✅])
+    N --> O[Restart from scratch]
+    N --> P[Restart with same inputs]
+    O --> B
+    P --> B
+    N --> Q([END])
 
 
 
