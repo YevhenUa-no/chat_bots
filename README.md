@@ -79,6 +79,7 @@ Easy to Use: A simple, interactive interface to guide you through the process.
 
 ## 🎨 Mermaid Flowchart (Horizontal)
 
+```mermaid
 flowchart LR
     A([START]) --> B[Setup Stage]
     B --> C{Input Method}
